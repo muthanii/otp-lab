@@ -4,3 +4,6 @@
 *.pem
 *.key
 .env
+
+# release assets built locally by scripts/build-release-assets.sh
+dist/

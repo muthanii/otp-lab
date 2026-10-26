@@ -51,52 +51,40 @@ ssh -p 2230 user@localhost                          # paste it
 
 ## Use it on a real server
 
-You need a Debian or Ubuntu server with `openssh-server`, an OpenBao reachable from it over HTTPS, and the CA certificate that signed OpenBao's TLS certificate. Run these **on the server**, and keep your current SSH session open until step 5 works:
+On a Debian or Ubuntu server that can reach your OpenBao over HTTPS, one command does the setup: it installs `openssh-server` if needed, downloads `vault-ssh-helper` for the server's CPU and checks its checksum, and connects the server's SSH to OpenBao through PAM. It doesn't create any accounts. Keep your current SSH session open until step 4 works.
 
-**1. Download the script** from the latest release, and check it arrived intact:
-
-```sh
-mkdir otp-setup && cd otp-setup
-curl -fsSLO https://github.com/muthanii/otp-lab/releases/latest/download/setup-otp-target.sh
-curl -fsSLO https://github.com/muthanii/otp-lab/releases/latest/download/SHA256SUMS
-sha256sum -c SHA256SUMS && chmod +x setup-otp-target.sh
-```
-
-To pin a version, replace `latest/download` with `download/v0.2.0` (or any release from 0.2.0 on).
-
-**2. Get `vault-ssh-helper`.** The script builds it if Go is installed on the server. Otherwise, copy over the one from the lab (the server must have the same CPU architecture, usually `amd64`):
+**1. On the server**, run the script from the latest release:
 
 ```sh
-# in the dev container, from the otp-lab folder:
-docker compose cp target:/usr/local/bin/vault-ssh-helper .
-scp vault-ssh-helper ca.pem <you>@<server>:otp-setup/
+curl -fsSL https://github.com/muthanii/otp-lab/releases/latest/download/setup-otp-target.sh \
+  | sudo bash -s -- --bao-addr https://bao.example.com:8200
 ```
 
-**3. Create the OTP accounts** (non-admins only) and run the script:
+Add `--ca-cert ca.pem` if OpenBao's certificate comes from your own CA rather than a public one. To read the script before running it, or to pin a version, download it first and check it:
 
 ```sh
-sudo useradd -m -s /bin/bash alice && sudo usermod -p '*' alice   # no usable password, like the lab
-sudo groupadd -f otp-users && sudo usermod -aG otp-users alice
-sudo ./setup-otp-target.sh --bao-addr https://bao.example.com:8200 \
-     --ca-cert ca.pem --roles otp --helper ./vault-ssh-helper
+curl -fsSLO https://github.com/muthanii/otp-lab/releases/download/v0.2.0/setup-otp-target.sh
+curl -fsSLO https://github.com/muthanii/otp-lab/releases/download/v0.2.0/SHA256SUMS
+sha256sum -c --ignore-missing SHA256SUMS
+sudo bash setup-otp-target.sh --bao-addr https://bao.example.com:8200
 ```
 
-The script prints the server's IP at the end, and warns about any `otp-users` member that has admin or sudo rights.
-
-**4. In OpenBao**, allow only those accounts and only this server's IP:
+**2. Choose who can log in with an OTP.** Add existing, non-admin accounts to the `otp-users` group, then rerun the script so it can check them and fill in the role command:
 
 ```sh
-bao write ssh/roles/otp key_type=otp default_user=alice allowed_users=alice cidr_list=<server IP>/32
+sudo usermod -aG otp-users <name>
 ```
 
-**5. Test from a second terminal:**
+**3. In OpenBao**, run the `bao write ssh/roles/...` command the script prints at the end. It's filled in with this server's IP and only the accounts that passed the admin check.
+
+**4. Test from a second terminal**, using the IP the script printed (even if you connect by a different public address):
 
 ```sh
 bao write -field=key ssh/creds/otp ip=<server IP>   # prints an OTP
-ssh alice@<server>                                  # paste it
+ssh <name>@<server>                                 # paste it
 ```
 
-Use the IP the script printed, even if you connect to the server by a different public address. All options, the safety checks and how to undo the changes are in [Setting up a real server](docs/real-server.md).
+All options, the safety checks and how to undo the changes are in [Setting up a real server](docs/real-server.md).
 
 ## Docs
 

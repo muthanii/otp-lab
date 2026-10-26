@@ -57,20 +57,26 @@ Things that break this chain:
 
 ## The real-server script
 
-`scripts/setup-otp-target.sh` reproduces the `target/` setup on a real server, so a change to `pam-sshd`, `otp.conf` or `config.hcl` usually needs the same change in the script and in `docs/real-server.md`. Unlike the lab, it edits the existing `/etc/pam.d/sshd` instead of replacing it, writes `sshd_config.d/00-otp.conf` (so it wins over `50-cloud-init.conf`), adds the same PAM guards (group from `--otp-group`, default `otp-users`, created if missing), uses `PermitRootLogin prohibit-password` so root keeps key login, warns about `otp-users` members with admin groups or personal sudoers rules, keeps public-key login unless `--otp-only`, requires TLS unless `--insecure-http`, and stops before touching PAM if `vault-ssh-helper -verify-only` fails.
+`scripts/setup-otp-target.sh` reproduces the `target/` setup on a real server, so a change to `pam-sshd`, `otp.conf` or `config.hcl` usually needs the same change in the script and in `docs/real-server.md`. It's meant to run as `curl ... | sudo bash -s -- --bao-addr ...`: it installs `openssh-server` if missing, downloads `vault-ssh-helper-linux-<amd64|arm64>` from the release and checks it against `SHA256SUMS`, creates `--otp-group` (it never creates accounts), adds the same PAM guards as the lab before the OTP check, writes `sshd_config.d/00-otp.conf` with `PermitRootLogin prohibit-password`, and stops before touching PAM if `vault-ssh-helper -verify-only` fails. It ends by printing the `bao write ssh/roles/...` command with only the accounts that passed the admin check. Keep it working when piped (no reads from stdin) and rerunnable (no duplicate PAM lines).
 
-Test it in a throwaway container on the lab network, never in the lab's own containers. Step 3 needs OpenBao unsealed; to test PAM and sshd while it's sealed, pass `--helper` a stub that exits 0 for `-verify-only` and execs the real helper otherwise. Check the guards by SSHing as different accounts with `SSH_ASKPASS=<script echoing a bad OTP> SSH_ASKPASS_REQUIRE=force` and counting blocks in `/var/log/vault-ssh.log` (only accounts that pass the guards reach the helper):
+Release assets come from `scripts/build-release-assets.sh TAG OUT_DIR`: it pins `SCRIPT_VERSION=latest` to the tag (so the script downloads the helper from its own release), builds the helper for amd64 and arm64 in `golang:1.27` using the script's `HELPER_VERSION`, and writes `SHA256SUMS`. The Release Please workflow runs it and uploads `dist/*` when a release is created. Asset names are part of the public download URLs; don't rename them.
+
+Test in throwaway containers on the lab network, never in the lab's own containers, with OpenBao unsealed (step 4 checks the connection). `OTP_LAB_DOWNLOAD_URL` points the script at a local mirror of the release:
 
 ```sh
-docker compose cp target:/usr/local/bin/vault-ssh-helper /tmp/t/
-docker run --rm --network otp-lab_lab --ip 172.30.0.20 -v /tmp/t:/t -v "$PWD/scripts:/s:ro" ubuntu:26.04 bash -c \
-  'apt-get update -qq && apt-get install -y -qq openssh-server && mkdir -p /run/sshd &&
-   /s/setup-otp-target.sh --bao-addr http://172.30.0.2:8200 --insecure-http --helper /t/vault-ssh-helper'
+scripts/build-release-assets.sh v0.0.0-test /tmp/dist
+docker run -d --name otp-dl --network otp-lab_lab --ip 172.30.0.30 -v /tmp/dist:/srv:ro busybox:1.37 httpd -f -p 8080 -h /srv
+docker run --rm --network otp-lab_lab --ip 172.30.0.20 ubuntu:26.04 bash -c \
+  'apt-get update -qq && apt-get install -y -qq curl && curl -fsSL http://172.30.0.30:8080/setup-otp-target.sh |
+   OTP_LAB_DOWNLOAD_URL=http://172.30.0.30:8080 bash -s -- --bao-addr http://172.30.0.2:8200 --insecure-http'
+docker rm -f otp-dl
 ```
+
+Check the PAM guards by then starting `sshd` in that container and SSHing as different accounts with `SSH_ASKPASS=<script echoing a bad OTP> SSH_ASKPASS_REQUIRE=force`, counting blocks in `/var/log/vault-ssh.log` (only accounts that pass the guards reach the helper).
 
 ## Versioning and commits
 
-Semver, managed by Release Please (`.github/workflows/release-please.yml`, `.github/release-please-config.json`, `.github/release-please-manifest.json`). It reads Conventional Commits on `main`, keeps a release PR that bumps `VERSION` and `CHANGELOG.md`, and tags and releases when that PR is merged. Never edit `VERSION`, `CHANGELOG.md` or the manifest by hand, and keep the Release Please files in `.github/`, not the repo root. When a release is created, the same workflow uploads `scripts/setup-otp-target.sh` and its `SHA256SUMS` to it, so servers can download the script alone from `releases/latest/download/`; keep that filename stable, since the README links to it.
+Semver, managed by Release Please (`.github/workflows/release-please.yml`, `.github/release-please-config.json`, `.github/release-please-manifest.json`). It reads Conventional Commits on `main`, keeps a release PR that bumps `VERSION` and `CHANGELOG.md`, and tags and releases when that PR is merged. Never edit `VERSION`, `CHANGELOG.md` or the manifest by hand, and keep the Release Please files in `.github/`, not the repo root. When a release is created, the same workflow builds and uploads the release assets (see above).
 
 Every commit message must be a Conventional Commit, written for lab users because it becomes the release note. `feat:`, `fix:` and `docs:` appear in the changelog and trigger a release; `ci:`, `build:`, `chore:`, `refactor:`, `test:` and `style:` are hidden. Changing IPs, ports, the login account or script options is a breaking change (`feat!:`); below 1.0.0 that bumps the minor version. Commit types and the human release steps are in `CONTRIBUTING.md`; keep the README to a one-line pointer.
 
