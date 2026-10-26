@@ -21,43 +21,57 @@ SSHD_DROPIN=/etc/ssh/sshd_config.d/00-otp.conf
 bao_addr='' ca_cert='' roles=otp mount=ssh helper='' users='' otp_group=otp-users otp_only=false insecure=false
 
 if [[ -t 1 && -t 2 && -z ${NO_COLOR:-} ]]; then
-  BOLD=$'\e[1m' RED=$'\e[31m' GREEN=$'\e[32m' YELLOW=$'\e[33m' CYAN=$'\e[36m' RESET=$'\e[0m'
+  BOLD=$'\e[1m' DIM=$'\e[2m' RED=$'\e[31m' GREEN=$'\e[32m' YELLOW=$'\e[33m' BLUE=$'\e[34m' CYAN=$'\e[36m' RESET=$'\e[0m'
 else
-  BOLD='' RED='' GREEN='' YELLOW='' CYAN='' RESET=''
+  BOLD='' DIM='' RED='' GREEN='' YELLOW='' BLUE='' CYAN='' RESET=''
 fi
 
 step() { echo "${BOLD}${CYAN}==> $*${RESET}"; }
-info() { echo "    $*"; }
+info() { echo "    ${BLUE}•${RESET} $*"; }
 ok() { echo "    ${GREEN}✓${RESET} $*"; }
-usage_hint() { echo "${RED}error:${RESET} $*" >&2; echo "Run with --help for the options." >&2; exit 1; }
+usage_hint() { echo "${RED}error:${RESET} $*" >&2; echo "${DIM}Run with --help for the options.${RESET}" >&2; exit 1; }
 die() { echo "${BOLD}${RED}error:${RESET}${RED} $*${RESET}" >&2; exit 1; }
 warn() { echo "    ${YELLOW}WARNING: $*${RESET}" >&2; }
+# vault-ssh-helper's own log lines, indented and coloured by level.
+helper_log() {
+  local line colour
+  while IFS= read -r line; do
+    [[ -n $line ]] || continue
+    case $line in
+      *"[ERROR]"*) colour=$RED ;;
+      *"[WARN]"*)  colour=$YELLOW ;;
+      *)           colour=$DIM ;;
+    esac
+    echo "    ${DIM}│${RESET} ${colour}${line}${RESET}"
+  done <<< "$1"
+}
 
 usage() {
+  local H=$BOLD O=$GREEN A=$CYAN D=$DIM R=$RESET
   cat <<EOF
-setup-otp-target.sh $SCRIPT_VERSION
+${BOLD}setup-otp-target.sh${R} ${D}$SCRIPT_VERSION${R}
 Turn a Debian/Ubuntu server into an OpenBao SSH OTP target. Run as root, and keep
 an existing SSH session open until an OTP login works from a second terminal.
 
-Usage:
-  sudo ./setup-otp-target.sh --bao-addr URL --users LIST [options]
-  wget -qO- https://github.com/$REPO/releases/latest/download/setup-otp-target.sh \\
-    | sudo bash -s -- --bao-addr URL --users LIST [options]
+${H}Usage:${R}
+  ${A}sudo ./setup-otp-target.sh --bao-addr URL --users LIST [options]${R}
+  ${A}wget -qO- https://github.com/$REPO/releases/latest/download/setup-otp-target.sh \\
+    | sudo bash -s -- --bao-addr URL --users LIST [options]${R}
 
-Required:
-  --bao-addr URL     OpenBao's address, https://
-  --users LIST       comma-separated OTP accounts; created with no usable password
+${H}Required:${R}
+  ${O}--bao-addr${R} URL     OpenBao's address, https://
+  ${O}--users${R} LIST       comma-separated OTP accounts; created with no usable password
                      if missing, refused if root, system (uid < 1000) or admin accounts
 
-Options:
-  --ca-cert FILE     CA that signed OpenBao's certificate (default: system's trusted CAs)
-  --roles LIST       OpenBao roles allowed for this server (default: otp)
-  --mount PATH       SSH engine mount path (default: ssh)
-  --helper FILE      use this vault-ssh-helper instead of downloading it from the release
-  --otp-group NAME   only members may log in with an OTP (default: otp-users)
-  --otp-only         also turn off public-key login (default: keys keep working)
-  --insecure-http    allow plain HTTP to OpenBao; labs only
-  -h, --help         show this help and exit
+${H}Options:${R}
+  ${O}--ca-cert${R} FILE     CA that signed OpenBao's certificate ${D}(default: system's trusted CAs)${R}
+  ${O}--roles${R} LIST       OpenBao roles allowed for this server ${D}(default: otp)${R}
+  ${O}--mount${R} PATH       SSH engine mount path ${D}(default: ssh)${R}
+  ${O}--helper${R} FILE      use this vault-ssh-helper instead of downloading it from the release
+  ${O}--otp-group${R} NAME   only members may log in with an OTP ${D}(default: otp-users)${R}
+  ${O}--otp-only${R}         also turn off public-key login ${D}(default: keys keep working)${R}
+  ${O}--insecure-http${R}    allow plain HTTP to OpenBao; ${YELLOW}labs only${R}
+  ${O}-h${R}, ${O}--help${R}         show this help and exit
 
 OTP logins are refused for root, system accounts, accounts outside --otp-group and
 members of the sudo, admin and wheel groups, so an OTP can never open an account
@@ -165,8 +179,9 @@ install -d -m 0755 "$CONF_DIR"
 } > "$CONF_DIR/config.hcl"
 
 step "4/8 Checking the config and the connection to OpenBao"
-"$BIN" -verify-only $dev_flag -config="$CONF_DIR/config.hcl" \
-  || die "vault-ssh-helper could not reach OpenBao at $bao_addr (check the address and port; OpenBao listens on 8200 by default); nothing in PAM or sshd was changed"
+if verify_out=$("$BIN" -verify-only $dev_flag -config="$CONF_DIR/config.hcl" 2>&1); then verify_rc=0; else verify_rc=$?; fi
+helper_log "$verify_out"
+(( verify_rc == 0 )) || die "vault-ssh-helper could not reach OpenBao at $bao_addr (check the address and port; OpenBao listens on 8200 by default); nothing in PAM or sshd was changed"
 ok "OpenBao answered"
 
 step "5/8 Setting up OTP accounts (group: $otp_group)"
@@ -266,14 +281,15 @@ ip=$(hostname -I 2>/dev/null | awk '{print $1}')
 # The suggested role allows exactly the --users accounts, which all passed the checks.
 first=${users%% *}
 allowed=${users// /,}
+role=${roles%%,*}
 echo
 echo "${BOLD}${GREEN}Done.${RESET} ${BOLD}Now, WITHOUT closing this session:${RESET}"
 cat <<EOF
-  1. In OpenBao, allow only these accounts and this server's interface IP:
-       bao write $mount/roles/${roles%%,*} key_type=otp default_user=$first allowed_users=$allowed cidr_list=${ip:-<server IP>}/32
-       (this replaces the role's users and cidr_list; if the role also serves other
-        servers, add this server's IP and accounts to them instead)
-  2. Get an OTP:   bao write -field=key $mount/creds/${roles%%,*} ip=${ip:-<server IP>}
-  3. Log in from a second terminal as one of: $users
-If it fails, check /var/log/vault-ssh.log. To undo PAM: cp $PAM_FILE.bak-otp $PAM_FILE
+  ${BOLD}1.${RESET} In OpenBao, allow only these accounts and this server's interface IP:
+       ${CYAN}bao write $mount/roles/$role key_type=otp default_user=$first allowed_users=$allowed cidr_list=${ip:-<server IP>}/32${RESET}
+       ${YELLOW}(this replaces the role's users and cidr_list; if the role also serves other
+        servers, add this server's IP and accounts to them instead)${RESET}
+  ${BOLD}2.${RESET} Get an OTP:   ${CYAN}bao write -field=key $mount/creds/$role ip=${ip:-<server IP>}${RESET}
+  ${BOLD}3.${RESET} Log in from a second terminal as one of: ${GREEN}$users${RESET}
+${DIM}If it fails, check /var/log/vault-ssh.log. To undo PAM: cp $PAM_FILE.bak-otp $PAM_FILE${RESET}
 EOF
