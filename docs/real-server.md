@@ -25,8 +25,9 @@ flowchart TD
     S5 --> S6["6 · Edit /etc/pam.d/sshd<br/>OTP check + otp-users / admin guards<br/>backup: sshd.bak-otp"]
     S6 --> S7{"7 · Add sshd_config.d/00-otp.conf<br/>sshd -t passes?"}
     S7 -- no --> STOP2["↩ Roll back PAM and sshd"]
-    S7 -- yes --> S8["Reload sshd"]
-    S8 --> S9["8 · Warn about admins in otp-users,<br/>print the OpenBao role command ✅"]
+    S7 -- yes --> S8{"Reload sshd, or start it<br/>if there is no systemd.<br/>Accepting connections?"}
+    S8 -- no --> STOP3["❌ Stop<br/>configured, but sshd is down"]
+    S8 -- yes --> S9["8 · Warn about admins in otp-users,<br/>print the OpenBao role command ✅"]
 ```
 
 A released script downloads the helper from its own release, so the two always match. Running it again is safe: it doesn't duplicate PAM lines. On a server set up with an older version, it adds the group checks in front of the existing OTP check.

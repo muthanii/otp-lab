@@ -20,9 +20,18 @@ SSHD_DROPIN=/etc/ssh/sshd_config.d/00-otp.conf
 
 bao_addr='' ca_cert='' roles=otp mount=ssh helper='' users='' otp_group=otp-users otp_only=false insecure=false
 
-usage_hint() { echo "error: $*" >&2; echo "Run with --help for the options." >&2; exit 1; }
-die() { echo "error: $*" >&2; exit 1; }
-warn() { echo "    WARNING: $*" >&2; }
+if [[ -t 1 && -t 2 && -z ${NO_COLOR:-} ]]; then
+  BOLD=$'\e[1m' RED=$'\e[31m' GREEN=$'\e[32m' YELLOW=$'\e[33m' CYAN=$'\e[36m' RESET=$'\e[0m'
+else
+  BOLD='' RED='' GREEN='' YELLOW='' CYAN='' RESET=''
+fi
+
+step() { echo "${BOLD}${CYAN}==> $*${RESET}"; }
+info() { echo "    $*"; }
+ok() { echo "    ${GREEN}✓${RESET} $*"; }
+usage_hint() { echo "${RED}error:${RESET} $*" >&2; echo "Run with --help for the options." >&2; exit 1; }
+die() { echo "${BOLD}${RED}error:${RESET}${RED} $*${RESET}" >&2; exit 1; }
+warn() { echo "    ${YELLOW}WARNING: $*${RESET}" >&2; }
 
 usage() {
   cat <<EOF
@@ -76,7 +85,7 @@ done
 [[ -n $bao_addr ]] || usage_hint "--bao-addr is required"
 [[ -n $users ]] || usage_hint "--users is required: the accounts that may log in with an OTP, e.g. --users user"
 if $insecure; then
-  echo "WARNING: --insecure-http sends OTPs to OpenBao unencrypted. Labs only." >&2
+  echo "${YELLOW}WARNING: --insecure-http sends OTPs to OpenBao unencrypted. Labs only.${RESET}" >&2
 else
   [[ $bao_addr == https://* ]] || die "--bao-addr must start with https:// (or pass --insecure-http for a lab)"
   [[ -z $ca_cert || -f $ca_cert ]] || die "--ca-cert $ca_cert: no such file"
@@ -107,16 +116,16 @@ fi
 dev_flag=
 if $insecure; then dev_flag=-dev; fi
 
-echo "==> 1/8 Checking prerequisites"
+step "1/8 Checking prerequisites"
 if ! command -v sshd >/dev/null; then
   command -v apt-get >/dev/null || die "openssh-server is not installed and apt-get is not available"
-  echo "    installing openssh-server"
+  info "installing openssh-server"
   DEBIAN_FRONTEND=noninteractive apt-get install -y -qq openssh-server >/dev/null
 fi
 grep -qE '^\s*Include\s+/etc/ssh/sshd_config\.d/' /etc/ssh/sshd_config \
   || die "/etc/ssh/sshd_config does not include sshd_config.d/; add the settings by hand"
 
-echo "==> 2/8 Installing vault-ssh-helper to $BIN"
+step "2/8 Installing vault-ssh-helper to $BIN"
 fetch() { curl -fsSL -o "$2" "$1" 2>/dev/null || wget -q -O "$2" "$1" 2>/dev/null; }
 if [[ -n $helper ]]; then
   install -m 0755 "$helper" "$BIN"
@@ -132,9 +141,9 @@ else
     (cd "$tmp" && grep " $asset\$" SHA256SUMS | sha256sum -c --quiet) \
       || die "checksum mismatch for $asset; refusing to install it"
     install -m 0755 "$tmp/$asset" "$BIN"
-    echo "    downloaded $asset from $DOWNLOAD_URL"
+    ok "downloaded $asset from $DOWNLOAD_URL (checksum OK)"
   elif command -v go >/dev/null; then
-    echo "    no download available; building $HELPER_VERSION with Go"
+    info "no download available; building $HELPER_VERSION with Go"
     GOBIN=$tmp CGO_ENABLED=0 go install "github.com/hashicorp/vault-ssh-helper@$HELPER_VERSION"
     install -m 0755 "$tmp/vault-ssh-helper" "$BIN"
   else
@@ -143,7 +152,7 @@ else
   rm -rf "$tmp"
 fi
 
-echo "==> 3/8 Writing $CONF_DIR/config.hcl"
+step "3/8 Writing $CONF_DIR/config.hcl"
 install -d -m 0755 "$CONF_DIR"
 {
   echo "vault_addr      = \"$bao_addr\""
@@ -155,27 +164,28 @@ install -d -m 0755 "$CONF_DIR"
   fi
 } > "$CONF_DIR/config.hcl"
 
-echo "==> 4/8 Checking the config and the connection to OpenBao"
+step "4/8 Checking the config and the connection to OpenBao"
 "$BIN" -verify-only $dev_flag -config="$CONF_DIR/config.hcl" \
-  || die "vault-ssh-helper could not verify its setup; nothing in PAM or sshd was changed"
+  || die "vault-ssh-helper could not reach OpenBao at $bao_addr (check the address and port; OpenBao listens on 8200 by default); nothing in PAM or sshd was changed"
+ok "OpenBao answered"
 
-echo "==> 5/8 Setting up OTP accounts (group: $otp_group)"
+step "5/8 Setting up OTP accounts (group: $otp_group)"
 groupadd -f "$otp_group"
 for u in $users; do
   if id "$u" >/dev/null 2>&1; then
-    echo "    $u exists"
+    info "$u exists"
   else
     # '*' unlocks the account without giving it a usable password, like the lab's user.
     useradd -m -s /bin/bash "$u" && usermod -p '*' "$u"
-    echo "    created $u"
+    ok "created $u"
   fi
   usermod -aG "$otp_group" "$u"
 done
 
-echo "==> 6/8 Updating $PAM_FILE (backup: $PAM_FILE.bak-otp)"
+step "6/8 Updating $PAM_FILE (backup: $PAM_FILE.bak-otp)"
 backup_pam() { [[ -f $PAM_FILE.bak-otp ]] || cp -p "$PAM_FILE" "$PAM_FILE.bak-otp"; }
 if grep -q vault-ssh-helper "$PAM_FILE"; then
-  echo "    already contains vault-ssh-helper"
+  info "already contains vault-ssh-helper"
 else
   backup_pam
   helper_line="auth requisite pam_exec.so quiet expose_authtok log=/var/log/vault-ssh.log $BIN $dev_flag -config=$CONF_DIR/config.hcl"
@@ -188,7 +198,7 @@ else
   fi
 fi
 if grep -q "user ingroup $otp_group" "$PAM_FILE"; then
-  echo "    already restricts OTP logins to $otp_group"
+  info "already restricts OTP logins to $otp_group"
 else
   backup_pam
   # Before the helper, so a refused account never uses up an OTP.
@@ -196,7 +206,7 @@ else
 }" "$PAM_FILE"
 fi
 
-echo "==> 7/8 Configuring sshd ($SSHD_DROPIN)"
+step "7/8 Configuring and starting sshd ($SSHD_DROPIN)"
 {
   echo "UsePAM yes"
   echo "KbdInteractiveAuthentication yes"
@@ -212,17 +222,35 @@ if ! sshd -t; then
   die "sshd config test failed; PAM and sshd changes were rolled back"
 fi
 
-if command -v systemctl >/dev/null && systemctl is-system-running >/dev/null 2>&1; then
-  systemctl reload ssh 2>/dev/null || systemctl reload sshd
-  echo "    sshd reloaded"
+sshd_port=$(sshd -T 2>/dev/null | awk '$1 == "port" {print $2; exit}')
+sshd_port=${sshd_port:-22}
+sshd_answers() { timeout 3 bash -c "exec 3<>/dev/tcp/127.0.0.1/$sshd_port" 2>/dev/null; }
+
+# /run/systemd/system exists whenever systemd is the init system, even when
+# `systemctl is-system-running` reports "degraded" because some other unit failed.
+if [[ -d /run/systemd/system ]]; then
+  # A failure here is reported by the connection check below.
+  info "reloading sshd"
+  systemctl reload-or-restart ssh 2>/dev/null || systemctl reload-or-restart sshd 2>/dev/null || true
+elif sshd_answers && [[ -f /run/sshd.pid ]]; then
+  info "reloading sshd (no systemd)"
+  kill -HUP "$(cat /run/sshd.pid)"
 else
-  echo "    no systemd here; restart sshd yourself"
+  # Containers and other systems without systemd: start sshd ourselves.
+  info "starting sshd (no systemd)"
+  mkdir -p /run/sshd
+  "$(command -v sshd)" || true
 fi
 
-echo "==> 8/8 Checking $otp_group members for admin rights"
+sleep 1
+sshd_answers \
+  || die "sshd is not accepting connections on port $sshd_port; PAM and sshd are configured, but nobody can log in until it runs"
+ok "sshd is accepting connections on port $sshd_port"
+
+step "8/8 Checking $otp_group members for admin rights"
 members=$(getent group "$otp_group" | cut -d: -f4 | tr ',' ' ')
 if [[ -z $members ]]; then
-  echo "    $otp_group has no members"
+  info "$otp_group has no members"
 fi
 for u in $members; do
   if id -nG "$u" | tr ' ' '\n' | grep -qxE "${ADMIN_GROUPS//:/|}"; then
@@ -230,7 +258,7 @@ for u in $members; do
   elif command -v sudo >/dev/null && sudo -l -U "$u" 2>/dev/null | grep -qE '^\s+\('; then
     warn "$u has its own sudo rules, so an OTP for it can reach root; remove them from /etc/sudoers*"
   else
-    echo "    $u: ok, no admin rights"
+    ok "$u: no admin rights"
   fi
 done
 
@@ -238,9 +266,9 @@ ip=$(hostname -I 2>/dev/null | awk '{print $1}')
 # The suggested role allows exactly the --users accounts, which all passed the checks.
 first=${users%% *}
 allowed=${users// /,}
+echo
+echo "${BOLD}${GREEN}Done.${RESET} ${BOLD}Now, WITHOUT closing this session:${RESET}"
 cat <<EOF
-
-Done. Now, WITHOUT closing this session:
   1. In OpenBao, allow only these accounts and this server's interface IP:
        bao write $mount/roles/${roles%%,*} key_type=otp default_user=$first allowed_users=$allowed cidr_list=${ip:-<server IP>}/32
        (this replaces the role's users and cidr_list; if the role also serves other
