@@ -6,7 +6,7 @@ On a real Debian or Ubuntu server, [`scripts/setup-otp-target.sh`](../scripts/se
 
 ```sh
 curl -fsSL https://github.com/muthanii/otp-lab/releases/latest/download/setup-otp-target.sh \
-  | sudo bash -s -- --bao-addr https://bao.example.com:8200
+  | sudo bash -s -- --bao-addr https://bao.example.com:8200 --users user
 ```
 
 The [README](../README.md#use-it-on-a-real-server) shows how to download and check the script first, or pin a version.
@@ -15,21 +15,24 @@ The [README](../README.md#use-it-on-a-real-server) shows how to download and che
 
 ```mermaid
 flowchart TD
-    S1["1 · Install openssh-server if missing"] --> S2["2 · Download vault-ssh-helper<br/>for this CPU, check SHA256SUMS"]
+    S0{"Check --users:<br/>given, not root, not system,<br/>not admin, no sudo rules?"} -- no --> STOPU["❌ Stop<br/>nothing changed"]
+    S0 -- yes --> S1["1 · Install openssh-server if missing"] --> S2["2 · Download vault-ssh-helper<br/>for this CPU, check SHA256SUMS"]
     S2 -- "checksum wrong" --> STOP0["❌ Stop<br/>nothing installed"]
     S2 --> S3["3 · Write config.hcl"]
     S3 --> S4{"4 · verify-only:<br/>can it reach OpenBao?"}
     S4 -- no --> STOP1["❌ Stop<br/>PAM and sshd untouched"]
-    S4 -- yes --> S6["5 · Create otp-users group, edit /etc/pam.d/sshd<br/>OTP check + otp-users / admin guards<br/>backup: sshd.bak-otp"]
-    S6 --> S7{"6 · Add sshd_config.d/00-otp.conf<br/>sshd -t passes?"}
+    S4 -- yes --> S5["5 · Create --users accounts<br/>in otp-users"]
+    S5 --> S6["6 · Edit /etc/pam.d/sshd<br/>OTP check + otp-users / admin guards<br/>backup: sshd.bak-otp"]
+    S6 --> S7{"7 · Add sshd_config.d/00-otp.conf<br/>sshd -t passes?"}
     S7 -- no --> STOP2["↩ Roll back PAM and sshd"]
     S7 -- yes --> S8["Reload sshd"]
-    S8 --> S9["7 · Warn about admins in otp-users,<br/>print the OpenBao role command ✅"]
+    S8 --> S9["8 · Warn about admins in otp-users,<br/>print the OpenBao role command ✅"]
 ```
 
 | Option | Meaning |
 |---|---|
 | `--bao-addr URL` | OpenBao's address, `https://` (required) |
+| `--users LIST` | Comma-separated OTP accounts (required). Missing ones are created with no usable password; the script refuses `root`, system accounts (uid below 1000), and accounts with admin groups or sudo rules |
 | `--ca-cert FILE` | CA that signed OpenBao's certificate. Leave it out if the certificate comes from a public CA |
 | `--roles LIST` | Comma-separated OpenBao roles allowed for this server (default `otp`) |
 | `--helper FILE` | Use this `vault-ssh-helper` binary instead of downloading one. If the download fails, the script builds one with Go, if installed |
@@ -50,8 +53,8 @@ An OTP must never open an account that can create admins. The script sets up the
    bao write ssh/roles/otp key_type=otp default_user=<name> allowed_users=<name>,<name2> cidr_list=<server IP>/32
    ```
 
-2. **Add only non-admin accounts to `otp-users`**, with `usermod -aG otp-users <name>`. The script doesn't create accounts. PAM refuses OTP logins for root, system accounts (uid below 1000), anyone outside `otp-users`, and anyone in `sudo`, `admin` or `wheel`. Admins keep using keys.
-3. **Read the warnings from step 7.** The role command the script prints leaves out any account it warned about. PAM can't see personal rules in `/etc/sudoers.d/`, so the script lists `otp-users` members that have one. Remove those rules, or that account can reach root with an OTP.
+2. **Name only non-admin accounts in `--users`.** The script refuses admin, system and sudo-capable accounts, creates missing ones and adds them to `otp-users`. PAM refuses OTP logins for root, system accounts (uid below 1000), anyone outside `otp-users`, and anyone in `sudo`, `admin` or `wheel`. Admins keep using keys.
+3. **Read the warnings from step 8.** They cover `otp-users` members added outside the script. PAM can't see personal rules in `/etc/sudoers.d/`, so the script lists `otp-users` members that have one. Remove those rules, or that account can reach root with an OTP.
 
 ## How the lab files map to a real server
 

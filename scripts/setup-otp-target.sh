@@ -4,9 +4,11 @@
 # an existing SSH session open until an OTP login works from a second terminal.
 #
 #   curl -fsSL https://github.com/muthanii/otp-lab/releases/latest/download/setup-otp-target.sh \
-#     | sudo bash -s -- --bao-addr https://bao.example.com:8200
+#     | sudo bash -s -- --bao-addr https://bao.example.com:8200 --users user
 #
 # --bao-addr     OpenBao's address (required)
+# --users        comma-separated OTP accounts (required); created with no usable
+#                password if missing, refused if they are root, system or admin accounts
 # --ca-cert      CA that signed OpenBao's certificate (default: the system's trusted CAs)
 # --roles        comma-separated OpenBao roles allowed for this server (default: otp)
 # --mount        SSH engine mount path (default: ssh)
@@ -33,7 +35,7 @@ ADMIN_GROUPS=sudo:admin:wheel
 # 00- so it wins over distro drop-ins like 50-cloud-init.conf (first value wins in sshd).
 SSHD_DROPIN=/etc/ssh/sshd_config.d/00-otp.conf
 
-bao_addr='' ca_cert='' roles=otp mount=ssh helper='' otp_group=otp-users otp_only=false insecure=false
+bao_addr='' ca_cert='' roles=otp mount=ssh helper='' users='' otp_group=otp-users otp_only=false insecure=false
 
 die() { echo "error: $*" >&2; exit 1; }
 warn() { echo "    WARNING: $*" >&2; }
@@ -41,6 +43,7 @@ warn() { echo "    WARNING: $*" >&2; }
 while [[ $# -gt 0 ]]; do
   case $1 in
     --bao-addr)      bao_addr=$2; shift 2 ;;
+    --users)         users=$2; shift 2 ;;
     --ca-cert)       ca_cert=$2; shift 2 ;;
     --roles)         roles=$2; shift 2 ;;
     --mount)         mount=$2; shift 2 ;;
@@ -54,12 +57,28 @@ done
 
 [[ $EUID -eq 0 ]] || die "run as root"
 [[ -n $bao_addr ]] || die "--bao-addr is required"
+[[ -n $users ]] || die "--users is required: the accounts that may log in with an OTP, e.g. --users user"
 if $insecure; then
   echo "WARNING: --insecure-http sends OTPs to OpenBao unencrypted. Labs only." >&2
 else
   [[ $bao_addr == https://* ]] || die "--bao-addr must start with https:// (or pass --insecure-http for a lab)"
   [[ -z $ca_cert || -f $ca_cert ]] || die "--ca-cert $ca_cert: no such file"
 fi
+users=${users//,/ }
+for u in $users; do
+  [[ $u =~ ^[a-z_][a-z0-9_-]{0,31}$ ]] || die "--users: '$u' is not a valid account name"
+  [[ $u != root ]] || die "--users: root can never log in with an OTP"
+  if id "$u" >/dev/null 2>&1; then
+    (( $(id -u "$u") >= 1000 )) || die "--users: $u is a system account (uid < 1000)"
+    if id -nG "$u" | tr ' ' '\n' | grep -qxE "${ADMIN_GROUPS//:/|}"; then
+      die "--users: $u is in an admin group (${ADMIN_GROUPS//:/, }); OTP accounts must not be admins"
+    fi
+    if command -v sudo >/dev/null && sudo -l -U "$u" 2>/dev/null | grep -qE '^\s+\('; then
+      die "--users: $u has sudo rules; OTP accounts must not be able to reach root"
+    fi
+  fi
+done
+
 if [[ -z $DOWNLOAD_URL ]]; then
   if [[ $SCRIPT_VERSION == latest ]]; then
     DOWNLOAD_URL=https://github.com/$REPO/releases/latest/download
@@ -71,7 +90,7 @@ fi
 dev_flag=
 if $insecure; then dev_flag=-dev; fi
 
-echo "==> 1/7 Checking prerequisites"
+echo "==> 1/8 Checking prerequisites"
 if ! command -v sshd >/dev/null; then
   command -v apt-get >/dev/null || die "openssh-server is not installed and apt-get is not available"
   echo "    installing openssh-server"
@@ -80,7 +99,7 @@ fi
 grep -qE '^\s*Include\s+/etc/ssh/sshd_config\.d/' /etc/ssh/sshd_config \
   || die "/etc/ssh/sshd_config does not include sshd_config.d/; add the settings by hand"
 
-echo "==> 2/7 Installing vault-ssh-helper to $BIN"
+echo "==> 2/8 Installing vault-ssh-helper to $BIN"
 fetch() { curl -fsSL -o "$2" "$1" 2>/dev/null || wget -q -O "$2" "$1" 2>/dev/null; }
 if [[ -n $helper ]]; then
   install -m 0755 "$helper" "$BIN"
@@ -107,7 +126,7 @@ else
   rm -rf "$tmp"
 fi
 
-echo "==> 3/7 Writing $CONF_DIR/config.hcl"
+echo "==> 3/8 Writing $CONF_DIR/config.hcl"
 install -d -m 0755 "$CONF_DIR"
 {
   echo "vault_addr      = \"$bao_addr\""
@@ -119,12 +138,24 @@ install -d -m 0755 "$CONF_DIR"
   fi
 } > "$CONF_DIR/config.hcl"
 
-echo "==> 4/7 Checking the config and the connection to OpenBao"
+echo "==> 4/8 Checking the config and the connection to OpenBao"
 "$BIN" -verify-only $dev_flag -config="$CONF_DIR/config.hcl" \
   || die "vault-ssh-helper could not verify its setup; nothing in PAM or sshd was changed"
 
-echo "==> 5/7 Updating $PAM_FILE (backup: $PAM_FILE.bak-otp)"
+echo "==> 5/8 Setting up OTP accounts (group: $otp_group)"
 groupadd -f "$otp_group"
+for u in $users; do
+  if id "$u" >/dev/null 2>&1; then
+    echo "    $u exists"
+  else
+    # '*' unlocks the account without giving it a usable password, like the lab's user.
+    useradd -m -s /bin/bash "$u" && usermod -p '*' "$u"
+    echo "    created $u"
+  fi
+  usermod -aG "$otp_group" "$u"
+done
+
+echo "==> 6/8 Updating $PAM_FILE (backup: $PAM_FILE.bak-otp)"
 backup_pam() { [[ -f $PAM_FILE.bak-otp ]] || cp -p "$PAM_FILE" "$PAM_FILE.bak-otp"; }
 if grep -q vault-ssh-helper "$PAM_FILE"; then
   echo "    already contains vault-ssh-helper"
@@ -148,7 +179,7 @@ else
 }" "$PAM_FILE"
 fi
 
-echo "==> 6/7 Configuring sshd ($SSHD_DROPIN)"
+echo "==> 7/8 Configuring sshd ($SSHD_DROPIN)"
 {
   echo "UsePAM yes"
   echo "KbdInteractiveAuthentication yes"
@@ -171,12 +202,11 @@ else
   echo "    no systemd here; restart sshd yourself"
 fi
 
-echo "==> 7/7 Checking $otp_group members for admin rights"
+echo "==> 8/8 Checking $otp_group members for admin rights"
 members=$(getent group "$otp_group" | cut -d: -f4 | tr ',' ' ')
 if [[ -z $members ]]; then
-  echo "    $otp_group has no members yet; add OTP accounts with: usermod -aG $otp_group <name>"
+  echo "    $otp_group has no members"
 fi
-ok=''
 for u in $members; do
   if id -nG "$u" | tr ' ' '\n' | grep -qxE "${ADMIN_GROUPS//:/|}"; then
     warn "$u is in an admin group, so PAM will refuse its OTP logins"
@@ -184,21 +214,21 @@ for u in $members; do
     warn "$u has its own sudo rules, so an OTP for it can reach root; remove them from /etc/sudoers*"
   else
     echo "    $u: ok, no admin rights"
-    ok="$ok $u"
   fi
 done
 
 ip=$(hostname -I 2>/dev/null | awk '{print $1}')
-# Only accounts that passed the check above go into the suggested role.
-ok=${ok# }
-first=${ok%% *}
-allowed=${ok// /,}
+# The suggested role allows exactly the --users accounts, which all passed the checks.
+first=${users%% *}
+allowed=${users// /,}
 cat <<EOF
 
 Done. Now, WITHOUT closing this session:
   1. In OpenBao, allow only these accounts and this server's interface IP:
-       bao write $mount/roles/${roles%%,*} key_type=otp default_user=${first:-<name>} allowed_users=${allowed:-<names>} cidr_list=${ip:-<server IP>}/32
+       bao write $mount/roles/${roles%%,*} key_type=otp default_user=$first allowed_users=$allowed cidr_list=${ip:-<server IP>}/32
+       (this replaces the role's users and cidr_list; if the role also serves other
+        servers, add this server's IP and accounts to them instead)
   2. Get an OTP:   bao write -field=key $mount/creds/${roles%%,*} ip=${ip:-<server IP>}
-  3. Log in from a second terminal as one of: ${ok:-<a non-admin otp-users member>}
+  3. Log in from a second terminal as one of: $users
 If it fails, check /var/log/vault-ssh.log. To undo PAM: cp $PAM_FILE.bak-otp $PAM_FILE
 EOF
