@@ -40,6 +40,7 @@ flowchart TD
 | `--otp-group NAME` | Only members of this group may log in with an OTP (default `otp-users`). Created if missing |
 | `--otp-only` | Also turn off public-key login |
 | `--insecure-http` | Allow plain HTTP to OpenBao. Labs only |
+| `-h`, `--help` | Show the options and exit. Works without root and when piped |
 
 A released script downloads the helper from its own release, so the two always match. Running it again is safe: it doesn't duplicate PAM lines. On a server set up with an older version, it adds the group checks in front of the existing OTP check.
 
