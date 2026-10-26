@@ -57,24 +57,9 @@ ssh -p 2230 user@localhost                          # paste it
 | [How it works](docs/how-it-works.md) | Login sequence, why OTPs can't be reused, what the target checks, which files get written, OTP vs signed keys |
 | [Setting up a real server](docs/real-server.md) | The [`setup-otp-target.sh`](scripts/setup-otp-target.sh) script, what changes from the lab, and what to watch out for |
 
-## Versioning and releases
+## Versioning
 
-The project follows [Semantic Versioning](https://semver.org/). The current version is in [`VERSION`](VERSION), and changes are listed in [`CHANGELOG.md`](CHANGELOG.md).
-
-| Bump | When |
-|---|---|
-| Major (`1.0.0` → `2.0.0`) | Something users rely on changes: IPs, ports, the login account, or a removed or renamed script option |
-| Minor (`0.1.0` → `0.2.0`) | New features, script options or docs pages that don't break anything |
-| Patch (`0.1.0` → `0.1.1`) | Fixes and doc corrections |
-
-To release, update `VERSION`, move the `[Unreleased]` notes in `CHANGELOG.md` under the new version, commit, then tag and push:
-
-```sh
-git tag -a v0.2.0 -m "v0.2.0"
-git push origin main v0.2.0
-```
-
-The [release workflow](.github/workflows/release.yml) checks that the tag matches `VERSION` and creates a GitHub release from that version's changelog section.
+Versions follow [semver](https://semver.org/); see [CHANGELOG.md](CHANGELOG.md) for what changed in each release.
 
 ## License
 

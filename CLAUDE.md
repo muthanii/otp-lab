@@ -27,7 +27,7 @@ docker run --rm -v "$PWD:/mnt:ro" -w /mnt koalaman/shellcheck:v0.10.0 scripts/*.
 
 ## Versioning
 
-Semver, with the version in `VERSION` and notes in `CHANGELOG.md` (Keep a Changelog). Add user-visible changes under `## [Unreleased]` as you make them. Pushing a `vX.Y.Z` tag runs `.github/workflows/release.yml`, which fails unless the tag equals `VERSION` and `CHANGELOG.md` has a `## [X.Y.Z]` section. Changing IPs, ports, the login account or script options is a breaking change. `.gitattributes` forces LF line endings because the files run inside Linux containers.
+Semver, with the version in `VERSION` and notes in `CHANGELOG.md` (Keep a Changelog). Bump rules and release steps for humans are in `CONTRIBUTING.md`; keep the README to a one-line pointer. Add user-visible changes under `## [Unreleased]` as you make them. Pushing a `vX.Y.Z` tag runs `.github/workflows/release.yml`, which fails unless the tag equals `VERSION` and `CHANGELOG.md` has a `## [X.Y.Z]` section. Changing IPs, ports, the login account or script options is a breaking change. `.gitattributes` forces LF line endings because the files run inside Linux containers.
 
 Nothing in the repo initialises OpenBao; after a fresh volume it must be done by hand:
 

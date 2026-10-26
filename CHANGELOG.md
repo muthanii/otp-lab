@@ -5,6 +5,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-10-26
+
+### Changed
+
+- Moved the versioning rules and release steps from the README to a new `CONTRIBUTING.md`; the README keeps a one-line pointer to the changelog.
+
 ## [0.1.0] - 2026-10-26
 
 ### Added
@@ -15,5 +21,6 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - `scripts/setup-otp-target.sh` to set up a real Debian or Ubuntu server as an OTP target, with a connection check before changing PAM or sshd and a rollback if `sshd -t` fails.
 - README and docs with Mermaid diagrams: running the lab, how OTP logins work, and setting up a real server.
 
-[Unreleased]: ../../compare/v0.1.0...HEAD
+[Unreleased]: ../../compare/v0.1.1...HEAD
+[0.1.1]: ../../compare/v0.1.0...v0.1.1
 [0.1.0]: ../../releases/tag/v0.1.0
