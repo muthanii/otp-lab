@@ -54,17 +54,33 @@ sequenceDiagram
 
 ```mermaid
 flowchart TD
-    A[ssh connection on port 2230] --> B{"Password or key login?"}
-    B -- "turned off in otp.conf" --> X1[❌ refused]
-    B -- "keyboard-interactive" --> C[PAM: pam_exec runs vault-ssh-helper]
+    A[ssh connection on port 2230] --> R{"Logging in as root?"}
+    R -- "PermitRootLogin no" --> X1[❌ refused]
+    R -- no --> B{"Password or key login?"}
+    B -- "turned off in otp.conf" --> X1
+    B -- "keyboard-interactive" --> G{"PAM: uid ≥ 1000, in otp-users,<br/>not in sudo / admin / wheel?"}
+    G -- no --> X2[❌ Permission denied<br/>OTP not used up]
+    G -- yes --> C[PAM: pam_exec runs vault-ssh-helper]
     C --> D{"OpenBao: OTP valid and unused?"}
-    D -- no --> X2[❌ Permission denied]
+    D -- no --> X3[❌ Permission denied]
     D -- yes --> E{"Helper: username is user<br/>and IP is 172.30.0.10?"}
-    E -- no --> X2
+    E -- no --> X3
     E -- yes --> F[✅ Logged in as user]
 ```
 
-The PAM step is `requisite`, and the normal Linux password check (`common-auth`) is left out, so a failed OTP ends the login with no fallback. The `user` account has its password set to `*`, so no typed password could ever work on its own.
+Every PAM step is `requisite`, and the normal Linux password check (`common-auth`) is left out, so any failed check ends the login with no fallback. The `user` account has its password set to `*`, so no typed password could ever work on its own.
+
+## Why an OTP can't open an admin account
+
+An OTP must never log someone in to an account that can create admins, so the lab blocks that in three places:
+
+| Layer | Rule | Stops |
+|---|---|---|
+| OpenBao role | `allowed_users=user` | OpenBao won't even issue an OTP for `root` or any other account. Without it, the role issues OTPs for **any** username |
+| sshd ([`otp.conf`](../target/otp.conf)) | `PermitRootLogin no` | Root logins of any kind |
+| PAM ([`pam-sshd`](../target/pam-sshd)) | `uid >= 1000`, `ingroup otp-users`, `notingroup sudo:admin:wheel` | System accounts, accounts not approved for OTP, and anyone in an admin group. These run **before** the OTP check, so a refused login doesn't use up the OTP |
+
+`user` is in `otp-users` and nothing else, has no sudo rights, and has no usable password, so it has no way to become root or add users. A personal rule in `/etc/sudoers.d/` isn't caught by the group check, which is why the [real-server script](real-server.md) warns about OTP accounts that have one.
 
 ## Which IP the OTP is for
 

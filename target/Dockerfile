@@ -11,7 +11,10 @@ COPY --from=helper /go/bin/vault-ssh-helper /usr/local/bin/vault-ssh-helper
 COPY config.hcl /etc/vault-ssh-helper.d/config.hcl
 COPY pam-sshd /etc/pam.d/sshd
 COPY otp.conf /etc/ssh/sshd_config.d/otp.conf
-# '*' unlocks the account without giving it a usable password.
-RUN useradd -m -s /bin/bash user && usermod -p '*' user
+# otp-users is the only group PAM accepts OTP logins for. '*' unlocks the account
+# without giving it a usable password; it has no sudo and no admin groups.
+RUN groupadd otp-users \
+ && useradd -m -s /bin/bash -G otp-users user \
+ && usermod -p '*' user
 EXPOSE 22
 CMD ["/usr/sbin/sshd", "-D", "-e"]

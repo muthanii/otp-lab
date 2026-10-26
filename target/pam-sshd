@@ -1,3 +1,8 @@
+# OTP logins only for members of otp-users who are not root or admins, checked
+# before the OTP so a refused account never uses one up.
+auth requisite pam_succeed_if.so quiet uid >= 1000
+auth requisite pam_succeed_if.so quiet user ingroup otp-users
+auth requisite pam_succeed_if.so quiet user notingroup sudo:admin:wheel
 auth requisite pam_exec.so quiet expose_authtok log=/var/log/vault-ssh.log /usr/local/bin/vault-ssh-helper -dev -config=/etc/vault-ssh-helper.d/config.hcl
 auth optional pam_unix.so not_set_pass use_first_pass nodelay
 account include common-account

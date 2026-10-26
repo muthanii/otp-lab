@@ -43,7 +43,7 @@ docker compose up -d --build
 export BAO_ADDR=http://127.0.0.1:8210
 bao operator init && bao operator unseal   # unseal 3 times, then: bao login
 bao secrets enable ssh
-bao write ssh/roles/otp key_type=otp default_user=user cidr_list=172.30.0.0/24
+bao write ssh/roles/otp key_type=otp default_user=user allowed_users=user cidr_list=172.30.0.0/24
 
 bao write -field=key ssh/creds/otp ip=172.30.0.10   # prints an OTP
 ssh -p 2230 user@localhost                          # paste it

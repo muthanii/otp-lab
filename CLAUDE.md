@@ -25,7 +25,7 @@ Nothing in the repo initialises OpenBao; after a fresh volume it must be done by
 export BAO_ADDR=http://127.0.0.1:8210
 bao operator init                     # then unseal with 3 keys and `bao login` with the root token
 bao secrets enable ssh                # mount path must be `ssh` (target/config.hcl)
-bao write ssh/roles/otp key_type=otp default_user=user cidr_list=172.30.0.0/24
+bao write ssh/roles/otp key_type=otp default_user=user allowed_users=user cidr_list=172.30.0.0/24
 bao write ssh/creds/otp ip=172.30.0.10    # prints the OTP
 ssh -p 2230 user@localhost           # paste the OTP at the prompt; a second use must fail
 ```
@@ -42,10 +42,12 @@ docker run --rm -v "$PWD:/mnt:ro" -w /mnt koalaman/shellcheck:v0.10.0 scripts/*.
 
 The login path spans several files in `target/`, and they only work as a set:
 
-1. `otp.conf` turns off password and public-key auth in sshd, leaving only keyboard-interactive login through PAM.
-2. `pam-sshd` replaces the whole PAM stack for sshd. `pam_exec ... expose_authtok` passes the typed password to `vault-ssh-helper` on stdin. The step is `requisite`, and `common-auth` is intentionally not included, so the OTP is the only way in. `pam_unix ... use_first_pass` is `optional` and is there only to satisfy the PAM stack.
+1. `otp.conf` turns off password and public-key auth and root login in sshd, leaving only keyboard-interactive login through PAM.
+2. `pam-sshd` replaces the whole PAM stack for sshd. Three `pam_succeed_if` guards come first and refuse uid < 1000, accounts outside `otp-users` and members of `sudo:admin:wheel`, before any OTP is checked or used up. Then `pam_exec ... expose_authtok` passes the typed password to `vault-ssh-helper` on stdin. The step is `requisite`, and `common-auth` is intentionally not included, so the OTP is the only way in. `pam_unix ... use_first_pass` is `optional` and is there only to satisfy the PAM stack.
 3. `vault-ssh-helper` (config in `config.hcl`) calls `ssh/verify` on OpenBao at `172.30.0.2:8200`. OpenBao deletes the OTP on use, so it can't be replayed. The helper also checks that the OTP's username and IP match this machine.
-4. The `user` account's password is set to `*`: the account is unlocked but has no password that could ever work.
+4. The `user` account is in `otp-users` only (no sudo or admin groups), and its password is set to `*`: the account is unlocked but has no password that could ever work.
+
+**An OTP must never open an account that can create admins.** That's enforced by the role's `allowed_users=user` (without it OpenBao issues OTPs for any username, including root), `PermitRootLogin`, and the PAM group guards. Don't loosen any of them, and keep new OTP accounts out of admin groups.
 
 Things that break this chain:
 - **Static IPs.** The `172.30.0.0/24` network and fixed addresses in `docker-compose.yml` are relied on by `config.hcl` (`vault_addr`), `bao.hcl` (`api_addr`) and the role's `cidr_list`. Request OTPs for the target's own IP `172.30.0.10`, not `localhost`, or the helper rejects them. The client's address doesn't matter (logins via port 2230 arrive from the Docker gateway `172.30.0.1`).
@@ -55,9 +57,9 @@ Things that break this chain:
 
 ## The real-server script
 
-`scripts/setup-otp-target.sh` reproduces the `target/` setup on a real server, so a change to `pam-sshd`, `otp.conf` or `config.hcl` usually needs the same change in the script and in `docs/real-server.md`. Unlike the lab, it edits the existing `/etc/pam.d/sshd` instead of replacing it, writes `sshd_config.d/00-otp.conf` (so it wins over `50-cloud-init.conf`), keeps public-key login unless `--otp-only`, requires TLS unless `--insecure-http`, and stops before touching PAM if `vault-ssh-helper -verify-only` fails.
+`scripts/setup-otp-target.sh` reproduces the `target/` setup on a real server, so a change to `pam-sshd`, `otp.conf` or `config.hcl` usually needs the same change in the script and in `docs/real-server.md`. Unlike the lab, it edits the existing `/etc/pam.d/sshd` instead of replacing it, writes `sshd_config.d/00-otp.conf` (so it wins over `50-cloud-init.conf`), adds the same PAM guards (group from `--otp-group`, default `otp-users`, created if missing), uses `PermitRootLogin prohibit-password` so root keeps key login, warns about `otp-users` members with admin groups or personal sudoers rules, keeps public-key login unless `--otp-only`, requires TLS unless `--insecure-http`, and stops before touching PAM if `vault-ssh-helper -verify-only` fails.
 
-Test it in a throwaway container on the lab network, never in the lab's own containers:
+Test it in a throwaway container on the lab network, never in the lab's own containers. Step 3 needs OpenBao unsealed; to test PAM and sshd while it's sealed, pass `--helper` a stub that exits 0 for `-verify-only` and execs the real helper otherwise. Check the guards by SSHing as different accounts with `SSH_ASKPASS=<script echoing a bad OTP> SSH_ASKPASS_REQUIRE=force` and counting blocks in `/var/log/vault-ssh.log` (only accounts that pass the guards reach the helper):
 
 ```sh
 docker compose cp target:/usr/local/bin/vault-ssh-helper /tmp/t/

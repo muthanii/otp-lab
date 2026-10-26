@@ -26,8 +26,11 @@ bao secrets enable ssh
 bao write ssh/roles/otp \
     key_type=otp \
     default_user=user \
+    allowed_users=user \
     cidr_list=172.30.0.0/24
 ```
+
+`allowed_users=user` matters: without it, OpenBao issues OTPs for **any** username, including `root` and admin accounts. If you created the role before, run the `bao write ssh/roles/otp` command again to add it. The target refuses root and admin logins on its own too (see [what the target checks](how-it-works.md#what-the-target-checks-in-order)), but the role is the first line of defence.
 
 Keep the init output outside the containers and outside this folder, for example in a password manager. Storing unseal keys next to OpenBao's data defeats the point of sealing.
 
