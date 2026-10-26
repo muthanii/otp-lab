@@ -70,55 +70,7 @@ If `wget` is missing, install it with `sudo apt-get install -y wget`. To pin a v
 ./setup-otp-target.sh --help        # or: ./setup-otp-target.sh -h
 ```
 
-<details>
-<summary>What <code>--help</code> prints</summary>
-
-```text
-setup-otp-target.sh v0.4.1
-Turn a Debian/Ubuntu server into an OpenBao SSH OTP target. Run as root, and keep
-an existing SSH session open until an OTP login works from a second terminal.
-
-Usage:
-  sudo ./setup-otp-target.sh --bao-addr URL --users LIST [options]
-  wget -qO- https://github.com/muthanii/otp-lab/releases/latest/download/setup-otp-target.sh \
-    | sudo bash -s -- --bao-addr URL --users LIST [options]
-
-Required:
-  --bao-addr URL     OpenBao's address, https://
-  --users LIST       comma-separated OTP accounts; created with no usable password
-                     if missing, refused if root, system (uid < 1000) or admin accounts
-
-Options:
-  --ca-cert FILE     CA that signed OpenBao's certificate (default: system's trusted CAs)
-  --roles LIST       OpenBao roles allowed for this server (default: otp)
-  --mount PATH       SSH engine mount path (default: ssh)
-  --helper FILE      use this vault-ssh-helper instead of downloading it from the release
-  --otp-group NAME   only members may log in with an OTP (default: otp-users)
-  --otp-only         also turn off public-key login (default: keys keep working)
-  --insecure-http    allow plain HTTP to OpenBao; labs only
-  -h, --help         show this help and exit
-
-OTP logins are refused for root, system accounts, accounts outside --otp-group and
-members of the sudo, admin and wheel groups, so an OTP can never open an account
-that can create admins.
-```
-
-</details>
-
-Every argument in detail:
-
-| Argument | Required? | Default | What it does | Example |
-|---|---|---|---|---|
-| `--bao-addr URL` | **Yes** | — | Where OpenBao is. Must start with `https://` unless you also pass `--insecure-http`. The server must be able to reach it at every OTP login | `--bao-addr https://bao.example.com:8200` |
-| `--users LIST` | **Yes** | — | Comma-separated accounts that may log in with an OTP. Missing ones are created with no usable password; existing ones are only added to the OTP group. The script stops before changing anything if one is `root`, a system account (uid below 1000), in `sudo`/`admin`/`wheel`, or has sudo rules. Use the OpenBao role's `default_user` | `--users user` or `--users ops,deploy` |
-| `--ca-cert FILE` | No | The server's trusted CAs | The CA certificate that signed OpenBao's TLS certificate. Only needed when OpenBao uses your own CA instead of a public one like Let's Encrypt | `--ca-cert ./ca.pem` |
-| `--roles LIST` | No | `otp` | Comma-separated OpenBao roles whose OTPs this server accepts. An OTP from any other role is rejected | `--roles prod-otp` |
-| `--mount PATH` | No | `ssh` | Where the SSH secrets engine is enabled in OpenBao (`bao secrets enable -path=…`) | `--mount ssh-prod` |
-| `--helper FILE` | No | Download from the release | Use a `vault-ssh-helper` binary you already have, for servers that can't reach GitHub. Without it, the script downloads the one for this CPU (amd64 or arm64) and checks its checksum | `--helper ./vault-ssh-helper` |
-| `--otp-group NAME` | No | `otp-users` | The Linux group whose members may log in with an OTP. Created if missing; `--users` accounts are added to it | `--otp-group ssh-otp` |
-| `--otp-only` | No | Off | Also turn off SSH key logins, so OTP is the only way in. Without it, keys keep working, which is your way back in if OpenBao is down | `--otp-only` |
-| `--insecure-http` | No | Off | Allow `http://` for `--bao-addr`, sending OTPs unencrypted. **Labs only** | `--insecure-http` |
-| `-h`, `--help` | No | — | Show the help and exit, without changing anything | `--help` |
+It lists every argument. For what each one does, with defaults and examples, see [Arguments](docs/real-server.md#arguments).
 
 **3. Run it as root:**
 
@@ -150,7 +102,7 @@ The safety checks, what each step changes and how to undo it are in [Setting up 
 |---|---|
 | [Running the lab](docs/running-the-lab.md) | Setup step by step, limited tokens, logging in from either container, troubleshooting, tear down |
 | [How it works](docs/how-it-works.md) | Login sequence, why OTPs can't be reused, what the target checks, which files get written, OTP vs signed keys |
-| [Setting up a real server](docs/real-server.md) | The [`setup-otp-target.sh`](scripts/setup-otp-target.sh) script, what changes from the lab, and what to watch out for |
+| [Setting up a real server](docs/real-server.md) | The [`setup-otp-target.sh`](scripts/setup-otp-target.sh) script, every argument, what changes from the lab, and what to watch out for |
 
 ## Versioning
 
