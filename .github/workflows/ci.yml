@@ -11,8 +11,8 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      - name: VERSION is valid semver
-        run: grep -qxE '[0-9]+\.[0-9]+\.[0-9]+' VERSION
+      - name: VERSION matches the Release Please manifest
+        run: test "$(cat VERSION)" = "$(jq -r '."."' .github/release-please-manifest.json)"
 
       - name: Shellcheck
         run: shellcheck scripts/*.sh

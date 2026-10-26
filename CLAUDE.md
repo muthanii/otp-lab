@@ -27,7 +27,7 @@ docker run --rm -v "$PWD:/mnt:ro" -w /mnt koalaman/shellcheck:v0.10.0 scripts/*.
 
 ## Versioning
 
-Semver, with the version in `VERSION` and notes in `CHANGELOG.md` (Keep a Changelog). Bump rules and release steps for humans are in `CONTRIBUTING.md`; keep the README to a one-line pointer. Add user-visible changes under `## [Unreleased]` as you make them. Pushing a `vX.Y.Z` tag runs `.github/workflows/release.yml`, which fails unless the tag equals `VERSION` and `CHANGELOG.md` has a `## [X.Y.Z]` section. Changing IPs, ports, the login account or script options is a breaking change. `.gitattributes` forces LF line endings because the files run inside Linux containers.
+Semver, managed by Release Please (`.github/workflows/release-please.yml`, `.github/release-please-config.json`, `.github/release-please-manifest.json`). It reads Conventional Commits on `main`, keeps a release PR that bumps `VERSION` and `CHANGELOG.md`, and tags and releases when that PR is merged. Never edit `VERSION`, `CHANGELOG.md` or the manifest by hand. Every commit message must be a Conventional Commit, written for lab users because it becomes the release note; `docs:` is visible and releasable here. Changing IPs, ports, the login account or script options is a breaking change (`feat!:`). Commit types and the human release steps are in `CONTRIBUTING.md`; keep the README to a one-line pointer. `.gitattributes` forces LF line endings because the files run inside Linux containers.
 
 Nothing in the repo initialises OpenBao; after a fresh volume it must be done by hand:
 

@@ -10,29 +10,28 @@ docker compose config --quiet
 docker compose build
 ```
 
-## Changelog
+## Commit messages
 
-Add user-visible changes under `## [Unreleased]` in [`CHANGELOG.md`](CHANGELOG.md) in the same pull request.
+Commits on `main` follow [Conventional Commits](https://www.conventionalcommits.org/). The type decides the next version, and the message becomes the release note, so write it for someone using the lab.
 
-## Versioning
+| Type | Use for | Next version | In the changelog |
+|---|---|---|---|
+| `feat:` | New features, script options, docs pages | Minor (`0.1.1` → `0.2.0`) | Features |
+| `fix:` | Bug fixes | Patch (`0.1.1` → `0.1.2`) | Bug Fixes |
+| `docs:` | Doc changes and corrections | Patch | Documentation |
+| `feat!:`, `fix!:` or a `BREAKING CHANGE:` footer | Changing something users rely on: IPs, ports, the login account, or a removed or renamed script option | Major (minor while below `1.0.0`) | Marked as breaking |
+| `ci:`, `build:`, `chore:`, `refactor:`, `test:`, `style:` | Everything else | None on its own | Hidden |
 
-The project follows [Semantic Versioning](https://semver.org/). The current version is in [`VERSION`](VERSION).
+Example:
 
-| Bump | When |
-|---|---|
-| Major (`1.0.0` → `2.0.0`) | Something users rely on changes: IPs, ports, the login account, or a removed or renamed script option |
-| Minor (`0.1.0` → `0.2.0`) | New features, script options or docs pages that don't break anything |
-| Patch (`0.1.0` → `0.1.1`) | Fixes and doc corrections |
+```text
+feat: add --user option to setup-otp-target.sh
+```
 
 ## Releasing
 
-1. Update `VERSION`.
-2. In `CHANGELOG.md`, move the `[Unreleased]` notes under a new `## [X.Y.Z] - YYYY-MM-DD` heading and add its link at the bottom.
-3. Commit, then tag and push:
+[Release Please](https://github.com/googleapis/release-please) handles versions, the changelog and releases. Don't edit `VERSION`, `CHANGELOG.md` or `.github/release-please-manifest.json` by hand.
 
-   ```sh
-   git tag -a vX.Y.Z -m "vX.Y.Z"
-   git push origin main vX.Y.Z
-   ```
-
-The [release workflow](.github/workflows/release.yml) checks that the tag matches `VERSION` and creates a GitHub release from that version's changelog section.
+1. Push or merge Conventional Commits to `main`.
+2. The [Release Please workflow](.github/workflows/release-please.yml) opens or updates a release PR that bumps `VERSION` and adds the changelog entry.
+3. Merge that PR when you want to release. Release Please then tags `vX.Y.Z` and creates the GitHub release.
