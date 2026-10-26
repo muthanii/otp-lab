@@ -38,6 +38,57 @@ After a container restart OpenBao is sealed again: run `bao operator unseal` thr
 
 You can also run these inside the OpenBao container (`docker compose exec openbao sh`). There `BAO_ADDR` is already set to `http://127.0.0.1:8200`, so skip the `export`.
 
+## Set up the target
+
+`target` starts as a **fresh Ubuntu server**: no SSH server, no accounts, no OTP setup. You set it up with [`setup-otp-target.sh`](../scripts/setup-otp-target.sh), exactly as you would a real server. OpenBao must be unsealed, since the script checks the connection before changing anything.
+
+```sh
+docker compose exec target bash
+# inside the target:
+apt-get update && apt-get install -y wget
+wget -q https://github.com/muthanii/otp-lab/releases/latest/download/setup-otp-target.sh
+wget -q https://github.com/muthanii/otp-lab/releases/latest/download/SHA256SUMS
+sha256sum -c --ignore-missing SHA256SUMS
+chmod +x setup-otp-target.sh
+./setup-otp-target.sh --bao-addr http://172.30.0.2:8200 --insecure-http --users user
+exit
+```
+
+| Option | Why in the lab |
+|---|---|
+| `--bao-addr http://172.30.0.2:8200` | OpenBao's address inside the lab network. `localhost:8210` only works from the dev container |
+| `--insecure-http` | The lab's OpenBao uses plain HTTP |
+| `--users user` | Matches the `otp` role's `default_user` and `allowed_users` |
+
+The script installs `openssh-server`, downloads `vault-ssh-helper`, creates `user`, sets up PAM and sshd, and starts sshd (the container has no systemd). Every step should show a green ✓. Skip the role command it prints at the end: the `otp` role above already covers the whole lab network, and the printed command would narrow it to this one server.
+
+### After a restart
+
+| What you ran | What happens to the target | What to do |
+|---|---|---|
+| `docker compose restart`, or the dev container restarted | Setup is kept, but sshd isn't running (nothing starts it in a container) | Rerun the script, or `docker compose exec target sh -c 'mkdir -p /run/sshd && /usr/sbin/sshd'` |
+| `docker compose down` then `up` | A new, fresh target | Set it up again |
+
+### Testing a change to the script
+
+To try a local copy before it's released, copy it in instead of downloading it. It still downloads `vault-ssh-helper` from the latest release:
+
+```sh
+docker compose cp scripts/setup-otp-target.sh target:/root/setup-otp-target.sh
+docker compose exec target /root/setup-otp-target.sh --bao-addr http://172.30.0.2:8200 --insecure-http --users user
+```
+
+## More fresh servers (try servers)
+
+To test against several servers, or keep `target` untouched, start more fresh Ubuntu containers on the lab network, each with its own IP and port:
+
+```sh
+docker run -d --name try-server --hostname try-server --network otp-lab_lab \
+  --ip 172.30.0.20 -p 2240:22 ubuntu:26.04 sleep infinity
+```
+
+Then set it up exactly like the target (use `docker exec -it try-server bash` to get in). The `otp` role already covers `172.30.0.20`. Log in with an OTP for **`172.30.0.20`**, using `ssh user@172.30.0.20` or `ssh -p 2240 user@localhost`. Remove it with `docker rm -f try-server`.
+
 ## A token that can only request OTPs (optional)
 
 The root token can do anything. For everyday logins, or to hand to a script, create a token limited to this role:
@@ -50,6 +101,8 @@ bao token create -policy=otp-only -ttl=8h -field=token
 ```
 
 ## Every login
+
+After [setting up the target](#set-up-the-target):
 
 You can log in from the dev container or from the OpenBao container. The only difference is the address you SSH to.
 
@@ -78,8 +131,9 @@ In both cases, ask for the OTP for **`172.30.0.10`**, the target's address insid
 
 ```sh
 docker compose exec target cat /var/log/vault-ssh.log   # what the helper saw
-docker compose logs target                              # sshd messages
 ```
+
+If there's no such file, the target hasn't been set up, or PAM refused the account before the OTP check (check the username). "Connection refused" means sshd isn't running: see [after a restart](#after-a-restart).
 
 | You see in the helper log | Meaning |
 |---|---|
@@ -88,8 +142,13 @@ docker compose logs target                              # sshd messages
 | `uuid string is wrong length` | Not an OTP at all (typo or a normal password) |
 | `Vault is sealed` | Unseal OpenBao |
 
+When the setup script itself stops at step 4, its error says why: OpenBao is sealed, not initialised, or unreachable at that address.
+
 ## Tear down
 
 ```sh
 docker compose down -v   # -v also deletes OpenBao's data, so you'll need the setup again
+docker rm -f try-server  # if you started any try servers
 ```
+
+The next `up` gives you a fresh target again.
