@@ -47,13 +47,14 @@ Run `./setup-otp-target.sh --help` (or `-h`) on the server to see them; it works
 | `--otp-group NAME` | No | `otp-users` | The Linux group whose members may log in with an OTP. Created if missing; `--users` accounts are added to it | `--otp-group ssh-otp` |
 | `--otp-only` | No | Off | Also turn off SSH key logins, so OTP is the only way in. Without it, keys keep working, which is your way back in if OpenBao is down | `--otp-only` |
 | `--insecure-http` | No | Off | Allow `http://` for `--bao-addr`, sending OTPs unencrypted. **Labs only** | `--insecure-http` |
+| `--update` | No | — | Replace this copy of the script with the latest release from GitHub (after checking its checksum) and exit. Doesn't change the server: rerun the script afterwards to apply the new version. Needs no root if you own the file. A normal run also warns when a newer release exists | `--update` |
 | `-h`, `--help` | No | — | Show the help and exit, without changing anything | `--help` |
 
 <details>
 <summary>What <code>--help</code> prints</summary>
 
 ```text
-setup-otp-target.sh v0.4.1
+setup-otp-target.sh v0.5.0
 Turn a Debian/Ubuntu server into an OpenBao SSH OTP target. Run as root, and keep
 an existing SSH session open until an OTP login works from a second terminal.
 
@@ -75,6 +76,7 @@ Options:
   --otp-group NAME   only members may log in with an OTP (default: otp-users)
   --otp-only         also turn off public-key login (default: keys keep working)
   --insecure-http    allow plain HTTP to OpenBao; labs only
+  --update           replace this file with the latest release from GitHub and exit
   -h, --help         show this help and exit
 
 OTP logins are refused for root, system accounts, accounts outside --otp-group and

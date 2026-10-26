@@ -94,6 +94,8 @@ bao write -field=key ssh/creds/otp ip=<server IP>   # prints an OTP
 ssh <name>@<server>                                 # paste it
 ```
 
+**Updating later:** `./setup-otp-target.sh --update` replaces the script with the latest release, after checking its checksum. Then rerun it with the same options to apply the new version. A normal run also warns when a newer release is out.
+
 The safety checks, what each step changes and how to undo it are in [Setting up a real server](docs/real-server.md).
 
 ## Docs
