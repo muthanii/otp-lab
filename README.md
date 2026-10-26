@@ -51,31 +51,27 @@ ssh -p 2230 user@localhost                          # paste it
 
 ## Use it on a real server
 
-On a Debian or Ubuntu server that can reach your OpenBao over HTTPS, one command does the setup: it installs `openssh-server` if needed, downloads `vault-ssh-helper` for the server's CPU and checks its checksum, and connects the server's SSH to OpenBao through PAM. It doesn't create any accounts. Keep your current SSH session open until step 4 works.
+On a Debian or Ubuntu server that can reach your OpenBao over HTTPS, one command does the setup: it installs `openssh-server` if needed, downloads `vault-ssh-helper` for the server's CPU and checks its checksum, creates the OTP accounts you name, and connects the server's SSH to OpenBao through PAM. Keep your current SSH session open until step 4 works.
 
 **1. On the server**, run the script from the latest release:
 
 ```sh
 curl -fsSL https://github.com/muthanii/otp-lab/releases/latest/download/setup-otp-target.sh \
-  | sudo bash -s -- --bao-addr https://bao.example.com:8200
+  | sudo bash -s -- --bao-addr https://bao.example.com:8200 --users user
 ```
 
 Add `--ca-cert ca.pem` if OpenBao's certificate comes from your own CA rather than a public one. To read the script before running it, or to pin a version, download it first and check it:
 
 ```sh
-curl -fsSLO https://github.com/muthanii/otp-lab/releases/download/v0.2.0/setup-otp-target.sh
-curl -fsSLO https://github.com/muthanii/otp-lab/releases/download/v0.2.0/SHA256SUMS
+curl -fsSLO https://github.com/muthanii/otp-lab/releases/download/v0.3.0/setup-otp-target.sh
+curl -fsSLO https://github.com/muthanii/otp-lab/releases/download/v0.3.0/SHA256SUMS
 sha256sum -c --ignore-missing SHA256SUMS
-sudo bash setup-otp-target.sh --bao-addr https://bao.example.com:8200
+sudo bash setup-otp-target.sh --bao-addr https://bao.example.com:8200 --users user
 ```
 
-**2. Choose who can log in with an OTP.** Add existing, non-admin accounts to the `otp-users` group, then rerun the script so it can check them and fill in the role command:
+**2. `--users` is required**: the comma-separated accounts that may log in with an OTP. Missing accounts are created with no usable password, and the script refuses (before changing anything) if one is `root`, a system account, or has admin or sudo rights. Use the same name as the OpenBao role's `default_user`, like `user` in the lab.
 
-```sh
-sudo usermod -aG otp-users <name>
-```
-
-**3. In OpenBao**, run the `bao write ssh/roles/...` command the script prints at the end. It's filled in with this server's IP and only the accounts that passed the admin check.
+**3. In OpenBao**, run the `bao write ssh/roles/...` command the script prints at the end, filled in with this server's IP and the `--users` accounts. If the role already serves other servers, add this server's IP to its `cidr_list` instead of replacing it.
 
 **4. Test from a second terminal**, using the IP the script printed (even if you connect by a different public address):
 

@@ -57,7 +57,7 @@ Things that break this chain:
 
 ## The real-server script
 
-`scripts/setup-otp-target.sh` reproduces the `target/` setup on a real server, so a change to `pam-sshd`, `otp.conf` or `config.hcl` usually needs the same change in the script and in `docs/real-server.md`. It's meant to run as `curl ... | sudo bash -s -- --bao-addr ...`: it installs `openssh-server` if missing, downloads `vault-ssh-helper-linux-<amd64|arm64>` from the release and checks it against `SHA256SUMS`, creates `--otp-group` (it never creates accounts), adds the same PAM guards as the lab before the OTP check, writes `sshd_config.d/00-otp.conf` with `PermitRootLogin prohibit-password`, and stops before touching PAM if `vault-ssh-helper -verify-only` fails. It ends by printing the `bao write ssh/roles/...` command with only the accounts that passed the admin check. Keep it working when piped (no reads from stdin) and rerunnable (no duplicate PAM lines).
+`scripts/setup-otp-target.sh` reproduces the `target/` setup on a real server, so a change to `pam-sshd`, `otp.conf` or `config.hcl` usually needs the same change in the script and in `docs/real-server.md`. It's meant to run as `curl ... | sudo bash -s -- --bao-addr ... --users ...`: it installs `openssh-server` if missing, downloads `vault-ssh-helper-linux-<amd64|arm64>` from the release and checks it against `SHA256SUMS`, requires `--users` and validates every name before changing anything (refuses root, uid < 1000, admin groups and sudo rules), creates missing accounts with password `*` in `--otp-group`, adds the same PAM guards as the lab before the OTP check, writes `sshd_config.d/00-otp.conf` with `PermitRootLogin prohibit-password`, and stops before touching PAM if `vault-ssh-helper -verify-only` fails. It ends by printing the `bao write ssh/roles/...` command for the `--users` accounts and this server's IP. Keep it working when piped (no reads from stdin) and rerunnable (no duplicate PAM lines).
 
 Release assets come from `scripts/build-release-assets.sh TAG OUT_DIR`: it pins `SCRIPT_VERSION=latest` to the tag (so the script downloads the helper from its own release), builds the helper for amd64 and arm64 in `golang:1.27` using the script's `HELPER_VERSION`, and writes `SHA256SUMS`. The Release Please workflow runs it and uploads `dist/*` when a release is created. Asset names are part of the public download URLs; don't rename them.
 
@@ -68,7 +68,7 @@ scripts/build-release-assets.sh v0.0.0-test /tmp/dist
 docker run -d --name otp-dl --network otp-lab_lab --ip 172.30.0.30 -v /tmp/dist:/srv:ro busybox:1.37 httpd -f -p 8080 -h /srv
 docker run --rm --network otp-lab_lab --ip 172.30.0.20 ubuntu:26.04 bash -c \
   'apt-get update -qq && apt-get install -y -qq curl && curl -fsSL http://172.30.0.30:8080/setup-otp-target.sh |
-   OTP_LAB_DOWNLOAD_URL=http://172.30.0.30:8080 bash -s -- --bao-addr http://172.30.0.2:8200 --insecure-http'
+   OTP_LAB_DOWNLOAD_URL=http://172.30.0.30:8080 bash -s -- --bao-addr http://172.30.0.2:8200 --insecure-http --users user'
 docker rm -f otp-dl
 ```
 
