@@ -32,7 +32,7 @@ an existing SSH session open until an OTP login works from a second terminal.
 
 Usage:
   sudo ./setup-otp-target.sh --bao-addr URL --users LIST [options]
-  curl -fsSL https://github.com/$REPO/releases/latest/download/setup-otp-target.sh \\
+  wget -qO- https://github.com/$REPO/releases/latest/download/setup-otp-target.sh \\
     | sudo bash -s -- --bao-addr URL --users LIST [options]
 
 Required:
