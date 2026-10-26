@@ -10,6 +10,7 @@ set -euo pipefail
 SCRIPT_VERSION=latest
 REPO=muthanii/otp-lab
 DOWNLOAD_URL=${OTP_LAB_DOWNLOAD_URL:-}
+LATEST_URL=${OTP_LAB_DOWNLOAD_URL:-https://github.com/$REPO/releases/latest/download}
 HELPER_VERSION=v0.2.4
 BIN=/usr/local/bin/vault-ssh-helper
 CONF_DIR=/etc/vault-ssh-helper.d
@@ -32,6 +33,51 @@ ok() { echo "    ${GREEN}✓${RESET} $*"; }
 usage_hint() { echo "${RED}error:${RESET} $*" >&2; echo "${DIM}Run with --help for the options.${RESET}" >&2; exit 1; }
 die() { echo "${BOLD}${RED}error:${RESET}${RED} $*${RESET}" >&2; exit 1; }
 warn() { echo "    ${YELLOW}WARNING: $*${RESET}" >&2; }
+fetch() { curl -fsSL -o "$2" "$1" 2>/dev/null || wget -q -O "$2" "$1" 2>/dev/null; }
+
+# Download the latest release's script into $1 and check it against SHA256SUMS.
+fetch_latest_script() {
+  fetch "$LATEST_URL/setup-otp-target.sh" "$1/setup-otp-target.sh" \
+    && fetch "$LATEST_URL/SHA256SUMS" "$1/SHA256SUMS" \
+    && (cd "$1" && grep ' setup-otp-target.sh$' SHA256SUMS | sha256sum -c --quiet >/dev/null 2>&1)
+}
+
+self_update() {
+  local self new_version
+  self=$(readlink -f "${BASH_SOURCE[0]}" 2>/dev/null || true)
+  [[ -f $self ]] \
+    || die "--update replaces a downloaded copy of the script. When piped from wget, you are already running the latest release"
+  # Global, so the EXIT trap can still see it after this function returns.
+  update_tmp=$(mktemp -d)
+  trap 'rm -rf "$update_tmp"' EXIT
+  info "checking $LATEST_URL"
+  fetch_latest_script "$update_tmp" || die "could not download and verify the latest release from $LATEST_URL"
+  new_version=$(sed -n 's/^SCRIPT_VERSION=//p' "$update_tmp/setup-otp-target.sh")
+  if [[ $new_version == "$SCRIPT_VERSION" ]]; then
+    ok "already up to date ($SCRIPT_VERSION)"
+    return
+  fi
+  [[ -w $self && -w $(dirname "$self") ]] || die "can't replace $self; rerun with sudo"
+  # Swap in a new file instead of writing over this one: bash is still reading it.
+  cp -p "$self" "$self.new" && cat "$update_tmp/setup-otp-target.sh" > "$self.new" && mv "$self.new" "$self"
+  ok "updated $self from $SCRIPT_VERSION to ${BOLD}$new_version${RESET} (checksum OK)"
+  info "rerun it with your usual options to apply the new version to this server"
+}
+
+# One line at the start of a run when a newer release exists. Silent if offline.
+notice_if_outdated() {
+  local tmp new_version
+  [[ $SCRIPT_VERSION != latest ]] || return 0
+  tmp=$(mktemp -d)
+  if fetch_latest_script "$tmp"; then
+    new_version=$(sed -n 's/^SCRIPT_VERSION=//p' "$tmp/setup-otp-target.sh")
+    if [[ -n $new_version && $new_version != "$SCRIPT_VERSION" ]]; then
+      warn "$new_version is available (this is $SCRIPT_VERSION); update with: ${BASH_SOURCE[0]:-setup-otp-target.sh} --update"
+    fi
+  fi
+  rm -rf "$tmp"
+}
+
 # vault-ssh-helper's own log lines, indented and coloured by level.
 helper_log() {
   local line colour
@@ -71,6 +117,7 @@ ${H}Options:${R}
   ${O}--otp-group${R} NAME   only members may log in with an OTP ${D}(default: otp-users)${R}
   ${O}--otp-only${R}         also turn off public-key login ${D}(default: keys keep working)${R}
   ${O}--insecure-http${R}    allow plain HTTP to OpenBao; ${YELLOW}labs only${R}
+  ${O}--update${R}           replace this file with the latest release from GitHub and exit
   ${O}-h${R}, ${O}--help${R}         show this help and exit
 
 OTP logins are refused for root, system accounts, accounts outside --otp-group and
@@ -82,6 +129,7 @@ EOF
 while [[ $# -gt 0 ]]; do
   case $1 in
     -h|--help)       usage; exit 0 ;;
+    --update)        self_update; exit 0 ;;
     --bao-addr)      bao_addr=$2; shift 2 ;;
     --users)         users=$2; shift 2 ;;
     --ca-cert)       ca_cert=$2; shift 2 ;;
@@ -131,6 +179,7 @@ dev_flag=
 if $insecure; then dev_flag=-dev; fi
 
 step "1/8 Checking prerequisites"
+notice_if_outdated
 if ! command -v sshd >/dev/null; then
   command -v apt-get >/dev/null || die "openssh-server is not installed and apt-get is not available"
   info "installing openssh-server"
@@ -140,7 +189,6 @@ grep -qE '^\s*Include\s+/etc/ssh/sshd_config\.d/' /etc/ssh/sshd_config \
   || die "/etc/ssh/sshd_config does not include sshd_config.d/; add the settings by hand"
 
 step "2/8 Installing vault-ssh-helper to $BIN"
-fetch() { curl -fsSL -o "$2" "$1" 2>/dev/null || wget -q -O "$2" "$1" 2>/dev/null; }
 if [[ -n $helper ]]; then
   install -m 0755 "$helper" "$BIN"
 else
