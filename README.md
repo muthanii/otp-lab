@@ -60,16 +60,18 @@ curl -fsSL https://github.com/muthanii/otp-lab/releases/latest/download/setup-ot
   | sudo bash -s -- --bao-addr https://bao.example.com:8200 --users user
 ```
 
-Add `--ca-cert ca.pem` if OpenBao's certificate comes from your own CA rather than a public one. To read the script before running it, or to pin a version, download it first and check it:
+Add `--ca-cert ca.pem` if OpenBao's certificate comes from your own CA rather than a public one. To read the script before running it, download it first and check it:
 
 ```sh
-curl -fsSLO https://github.com/muthanii/otp-lab/releases/download/v0.3.0/setup-otp-target.sh
-curl -fsSLO https://github.com/muthanii/otp-lab/releases/download/v0.3.0/SHA256SUMS
+curl -fsSLO https://github.com/muthanii/otp-lab/releases/latest/download/setup-otp-target.sh
+curl -fsSLO https://github.com/muthanii/otp-lab/releases/latest/download/SHA256SUMS
 sha256sum -c --ignore-missing SHA256SUMS
 chmod +x setup-otp-target.sh
 ./setup-otp-target.sh --help          # all options; works without root
 sudo ./setup-otp-target.sh --bao-addr https://bao.example.com:8200 --users user
 ```
+
+To pin a version, replace `latest/download` with `download/vX.Y.Z`, for example `download/v0.4.0`. `--help` needs 0.4.0 or later, and `--users` needs 0.3.0 or later.
 
 **2. `--users` is required**: the comma-separated accounts that may log in with an OTP. Missing accounts are created with no usable password, and the script refuses (before changing anything) if one is `root`, a system account, or has admin or sudo rights. Use the same name as the OpenBao role's `default_user`, like `user` in the lab.
 
