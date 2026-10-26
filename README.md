@@ -49,6 +49,43 @@ bao write -field=key ssh/creds/otp ip=172.30.0.10   # prints an OTP
 ssh -p 2230 user@localhost                          # paste it
 ```
 
+## Use it on a real server
+
+On a Debian or Ubuntu server that can reach your OpenBao over HTTPS, one command does the setup: it installs `openssh-server` if needed, downloads `vault-ssh-helper` for the server's CPU and checks its checksum, and connects the server's SSH to OpenBao through PAM. It doesn't create any accounts. Keep your current SSH session open until step 4 works.
+
+**1. On the server**, run the script from the latest release:
+
+```sh
+curl -fsSL https://github.com/muthanii/otp-lab/releases/latest/download/setup-otp-target.sh \
+  | sudo bash -s -- --bao-addr https://bao.example.com:8200
+```
+
+Add `--ca-cert ca.pem` if OpenBao's certificate comes from your own CA rather than a public one. To read the script before running it, or to pin a version, download it first and check it:
+
+```sh
+curl -fsSLO https://github.com/muthanii/otp-lab/releases/download/v0.2.0/setup-otp-target.sh
+curl -fsSLO https://github.com/muthanii/otp-lab/releases/download/v0.2.0/SHA256SUMS
+sha256sum -c --ignore-missing SHA256SUMS
+sudo bash setup-otp-target.sh --bao-addr https://bao.example.com:8200
+```
+
+**2. Choose who can log in with an OTP.** Add existing, non-admin accounts to the `otp-users` group, then rerun the script so it can check them and fill in the role command:
+
+```sh
+sudo usermod -aG otp-users <name>
+```
+
+**3. In OpenBao**, run the `bao write ssh/roles/...` command the script prints at the end. It's filled in with this server's IP and only the accounts that passed the admin check.
+
+**4. Test from a second terminal**, using the IP the script printed (even if you connect by a different public address):
+
+```sh
+bao write -field=key ssh/creds/otp ip=<server IP>   # prints an OTP
+ssh <name>@<server>                                 # paste it
+```
+
+All options, the safety checks and how to undo the changes are in [Setting up a real server](docs/real-server.md).
+
 ## Docs
 
 | Page | Covers |

@@ -15,6 +15,25 @@ jobs:
       # Keeps a release PR open that bumps VERSION and CHANGELOG.md from the
       # Conventional Commits on main; merging it tags vX.Y.Z and creates the release.
       - uses: googleapis/release-please-action@v4
+        id: release
         with:
           config-file: .github/release-please-config.json
           manifest-file: .github/release-please-manifest.json
+
+      - uses: actions/checkout@v5
+        if: ${{ steps.release.outputs.release_created }}
+
+      # So a server needs only the script: it downloads the helper for its CPU
+      # from the same release and checks it against SHA256SUMS.
+      - name: Build release assets
+        if: ${{ steps.release.outputs.release_created }}
+        env:
+          TAG: ${{ steps.release.outputs.tag_name }}
+        run: scripts/build-release-assets.sh "$TAG" dist
+
+      - name: Attach assets to the release
+        if: ${{ steps.release.outputs.release_created }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.release.outputs.tag_name }}
+        run: gh release upload "$TAG" dist/* --clobber
