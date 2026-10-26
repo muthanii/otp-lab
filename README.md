@@ -66,7 +66,9 @@ Add `--ca-cert ca.pem` if OpenBao's certificate comes from your own CA rather th
 curl -fsSLO https://github.com/muthanii/otp-lab/releases/download/v0.3.0/setup-otp-target.sh
 curl -fsSLO https://github.com/muthanii/otp-lab/releases/download/v0.3.0/SHA256SUMS
 sha256sum -c --ignore-missing SHA256SUMS
-sudo bash setup-otp-target.sh --bao-addr https://bao.example.com:8200 --users user
+chmod +x setup-otp-target.sh
+./setup-otp-target.sh --help          # all options; works without root
+sudo ./setup-otp-target.sh --bao-addr https://bao.example.com:8200 --users user
 ```
 
 **2. `--users` is required**: the comma-separated accounts that may log in with an OTP. Missing accounts are created with no usable password, and the script refuses (before changing anything) if one is `root`, a system account, or has admin or sudo rights. Use the same name as the OpenBao role's `default_user`, like `user` in the lab.

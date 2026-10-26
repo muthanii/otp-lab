@@ -2,24 +2,7 @@
 # Turn a Debian/Ubuntu server into an OpenBao SSH OTP target.
 # Does by hand what target/Dockerfile does for the lab. Run as root, and keep
 # an existing SSH session open until an OTP login works from a second terminal.
-#
-#   curl -fsSL https://github.com/muthanii/otp-lab/releases/latest/download/setup-otp-target.sh \
-#     | sudo bash -s -- --bao-addr https://bao.example.com:8200 --users user
-#
-# --bao-addr     OpenBao's address (required)
-# --users        comma-separated OTP accounts (required); created with no usable
-#                password if missing, refused if they are root, system or admin accounts
-# --ca-cert      CA that signed OpenBao's certificate (default: the system's trusted CAs)
-# --roles        comma-separated OpenBao roles allowed for this server (default: otp)
-# --mount        SSH engine mount path (default: ssh)
-# --helper       path to a vault-ssh-helper binary (default: download it from the release)
-# --otp-group    only members of this group may log in with an OTP (default: otp-users)
-# --otp-only     also turn off public-key login (default: keys keep working)
-# --insecure-http  allow plain HTTP to OpenBao; labs only
-#
-# OTP logins are refused for root, system accounts (uid < 1000), accounts outside
-# --otp-group and members of the sudo, admin and wheel groups, so an OTP can never
-# open an account that can create admins.
+# Run with --help for the options.
 set -euo pipefail
 
 # Release CI replaces "latest" with the release tag, so the script downloads the
@@ -37,11 +20,45 @@ SSHD_DROPIN=/etc/ssh/sshd_config.d/00-otp.conf
 
 bao_addr='' ca_cert='' roles=otp mount=ssh helper='' users='' otp_group=otp-users otp_only=false insecure=false
 
+usage_hint() { echo "error: $*" >&2; echo "Run with --help for the options." >&2; exit 1; }
 die() { echo "error: $*" >&2; exit 1; }
 warn() { echo "    WARNING: $*" >&2; }
 
+usage() {
+  cat <<EOF
+setup-otp-target.sh $SCRIPT_VERSION
+Turn a Debian/Ubuntu server into an OpenBao SSH OTP target. Run as root, and keep
+an existing SSH session open until an OTP login works from a second terminal.
+
+Usage:
+  sudo ./setup-otp-target.sh --bao-addr URL --users LIST [options]
+  curl -fsSL https://github.com/$REPO/releases/latest/download/setup-otp-target.sh \\
+    | sudo bash -s -- --bao-addr URL --users LIST [options]
+
+Required:
+  --bao-addr URL     OpenBao's address, https://
+  --users LIST       comma-separated OTP accounts; created with no usable password
+                     if missing, refused if root, system (uid < 1000) or admin accounts
+
+Options:
+  --ca-cert FILE     CA that signed OpenBao's certificate (default: system's trusted CAs)
+  --roles LIST       OpenBao roles allowed for this server (default: otp)
+  --mount PATH       SSH engine mount path (default: ssh)
+  --helper FILE      use this vault-ssh-helper instead of downloading it from the release
+  --otp-group NAME   only members may log in with an OTP (default: otp-users)
+  --otp-only         also turn off public-key login (default: keys keep working)
+  --insecure-http    allow plain HTTP to OpenBao; labs only
+  -h, --help         show this help and exit
+
+OTP logins are refused for root, system accounts, accounts outside --otp-group and
+members of the sudo, admin and wheel groups, so an OTP can never open an account
+that can create admins.
+EOF
+}
+
 while [[ $# -gt 0 ]]; do
   case $1 in
+    -h|--help)       usage; exit 0 ;;
     --bao-addr)      bao_addr=$2; shift 2 ;;
     --users)         users=$2; shift 2 ;;
     --ca-cert)       ca_cert=$2; shift 2 ;;
@@ -51,13 +68,13 @@ while [[ $# -gt 0 ]]; do
     --otp-group)     otp_group=$2; shift 2 ;;
     --otp-only)      otp_only=true; shift ;;
     --insecure-http) insecure=true; shift ;;
-    *) die "unknown option $1" ;;
+    *) usage_hint "unknown option $1" ;;
   esac
 done
 
 [[ $EUID -eq 0 ]] || die "run as root"
-[[ -n $bao_addr ]] || die "--bao-addr is required"
-[[ -n $users ]] || die "--users is required: the accounts that may log in with an OTP, e.g. --users user"
+[[ -n $bao_addr ]] || usage_hint "--bao-addr is required"
+[[ -n $users ]] || usage_hint "--users is required: the accounts that may log in with an OTP, e.g. --users user"
 if $insecure; then
   echo "WARNING: --insecure-http sends OTPs to OpenBao unencrypted. Labs only." >&2
 else
