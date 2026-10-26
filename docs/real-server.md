@@ -2,7 +2,7 @@
 
 [← Back to README](../README.md)
 
-On a real Debian or Ubuntu server, [`scripts/setup-otp-target.sh`](../scripts/setup-otp-target.sh) does what [`target/Dockerfile`](../target/Dockerfile) does for the lab. Copy the script and a `vault-ssh-helper` binary to the server, then run as root:
+On a real Debian or Ubuntu server, [`scripts/setup-otp-target.sh`](../scripts/setup-otp-target.sh) does what [`target/Dockerfile`](../target/Dockerfile) does for the lab. Download the script from a [release](https://github.com/muthanii/otp-lab/releases/latest) (each release has `setup-otp-target.sh` and its `SHA256SUMS`; the [README](../README.md#use-it-on-a-real-server) has the commands), copy a `vault-ssh-helper` binary to the server, then run as root:
 
 ```sh
 sudo ./setup-otp-target.sh --bao-addr https://bao.example.com:8200 \

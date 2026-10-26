@@ -15,6 +15,22 @@ jobs:
       # Keeps a release PR open that bumps VERSION and CHANGELOG.md from the
       # Conventional Commits on main; merging it tags vX.Y.Z and creates the release.
       - uses: googleapis/release-please-action@v4
+        id: release
         with:
           config-file: .github/release-please-config.json
           manifest-file: .github/release-please-manifest.json
+
+      - uses: actions/checkout@v5
+        if: ${{ steps.release.outputs.release_created }}
+
+      # So servers can download just the script:
+      # https://github.com/<owner>/<repo>/releases/latest/download/setup-otp-target.sh
+      - name: Attach the setup script to the release
+        if: ${{ steps.release.outputs.release_created }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.release.outputs.tag_name }}
+        working-directory: scripts
+        run: |
+          sha256sum setup-otp-target.sh > SHA256SUMS
+          gh release upload "$TAG" setup-otp-target.sh SHA256SUMS --clobber

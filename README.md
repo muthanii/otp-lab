@@ -53,19 +53,23 @@ ssh -p 2230 user@localhost                          # paste it
 
 You need a Debian or Ubuntu server with `openssh-server`, an OpenBao reachable from it over HTTPS, and the CA certificate that signed OpenBao's TLS certificate. Run these **on the server**, and keep your current SSH session open until step 5 works:
 
-**1. Get the script.**
+**1. Download the script** from the latest release, and check it arrived intact:
 
 ```sh
-git clone https://github.com/muthanii/otp-lab.git
-cd otp-lab/scripts
+mkdir otp-setup && cd otp-setup
+curl -fsSLO https://github.com/muthanii/otp-lab/releases/latest/download/setup-otp-target.sh
+curl -fsSLO https://github.com/muthanii/otp-lab/releases/latest/download/SHA256SUMS
+sha256sum -c SHA256SUMS && chmod +x setup-otp-target.sh
 ```
+
+To pin a version, replace `latest/download` with `download/v0.2.0` (or any release from 0.2.0 on).
 
 **2. Get `vault-ssh-helper`.** The script builds it if Go is installed on the server. Otherwise, copy over the one from the lab (the server must have the same CPU architecture, usually `amd64`):
 
 ```sh
 # in the dev container, from the otp-lab folder:
 docker compose cp target:/usr/local/bin/vault-ssh-helper .
-scp vault-ssh-helper ca.pem <you>@<server>:otp-lab/scripts/
+scp vault-ssh-helper ca.pem <you>@<server>:otp-setup/
 ```
 
 **3. Create the OTP accounts** (non-admins only) and run the script:

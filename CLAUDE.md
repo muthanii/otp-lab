@@ -70,7 +70,7 @@ docker run --rm --network otp-lab_lab --ip 172.30.0.20 -v /tmp/t:/t -v "$PWD/scr
 
 ## Versioning and commits
 
-Semver, managed by Release Please (`.github/workflows/release-please.yml`, `.github/release-please-config.json`, `.github/release-please-manifest.json`). It reads Conventional Commits on `main`, keeps a release PR that bumps `VERSION` and `CHANGELOG.md`, and tags and releases when that PR is merged. Never edit `VERSION`, `CHANGELOG.md` or the manifest by hand, and keep the Release Please files in `.github/`, not the repo root.
+Semver, managed by Release Please (`.github/workflows/release-please.yml`, `.github/release-please-config.json`, `.github/release-please-manifest.json`). It reads Conventional Commits on `main`, keeps a release PR that bumps `VERSION` and `CHANGELOG.md`, and tags and releases when that PR is merged. Never edit `VERSION`, `CHANGELOG.md` or the manifest by hand, and keep the Release Please files in `.github/`, not the repo root. When a release is created, the same workflow uploads `scripts/setup-otp-target.sh` and its `SHA256SUMS` to it, so servers can download the script alone from `releases/latest/download/`; keep that filename stable, since the README links to it.
 
 Every commit message must be a Conventional Commit, written for lab users because it becomes the release note. `feat:`, `fix:` and `docs:` appear in the changelog and trigger a release; `ci:`, `build:`, `chore:`, `refactor:`, `test:` and `style:` are hidden. Changing IPs, ports, the login account or script options is a breaking change (`feat!:`); below 1.0.0 that bumps the minor version. Commit types and the human release steps are in `CONTRIBUTING.md`; keep the README to a one-line pointer.
 
