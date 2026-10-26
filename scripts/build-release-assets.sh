@@ -12,7 +12,7 @@ mkdir -p "$out" && out=$(cd "$out" && pwd)
 sed "s/^SCRIPT_VERSION=latest\$/SCRIPT_VERSION=$tag/" "$here/setup-otp-target.sh" > "$out/setup-otp-target.sh"
 grep -qx "SCRIPT_VERSION=$tag" "$out/setup-otp-target.sh" || { echo "could not pin SCRIPT_VERSION" >&2; exit 1; }
 
-# Same image as target/Dockerfile, so the release helper matches the lab's.
+# Same Go toolchain the helper has always been built with.
 for arch in amd64 arm64; do
   docker run --rm -e CGO_ENABLED=0 -e GOOS=linux -e GOARCH="$arch" -e GOBIN= -v "$out:/out" golang:1.27 sh -c \
     "go install github.com/hashicorp/vault-ssh-helper@$helper_version \

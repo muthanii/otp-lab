@@ -14,8 +14,12 @@ services:
       lab:
         ipv4_address: 172.30.0.2
 
+  # A fresh Ubuntu server: no sshd, no OTP setup. Set it up with
+  # scripts/setup-otp-target.sh, as you would a real server.
   target:
-    build: ./target
+    image: ubuntu:26.04
+    hostname: target
+    command: ["sleep", "infinity"]
     ports:
       - "2230:22"
     depends_on: [openbao]

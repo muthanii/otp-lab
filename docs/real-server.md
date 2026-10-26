@@ -2,7 +2,7 @@
 
 [← Back to README](../README.md)
 
-On a real Debian or Ubuntu server, [`scripts/setup-otp-target.sh`](../scripts/setup-otp-target.sh) does what [`target/Dockerfile`](../target/Dockerfile) does for the lab. Each [release](https://github.com/muthanii/otp-lab/releases/latest) ships the script, `vault-ssh-helper` for amd64 and arm64, and `SHA256SUMS`, so the server needs nothing but `wget` (or `curl`):
+[`scripts/setup-otp-target.sh`](../scripts/setup-otp-target.sh) sets up a Debian or Ubuntu server to accept OTP logins. It's the same script the lab uses on its fresh `target` container ([set up the target](running-the-lab.md#set-up-the-target)), so trying it in the lab first is a full rehearsal. Each [release](https://github.com/muthanii/otp-lab/releases/latest) ships the script, `vault-ssh-helper` for amd64 and arm64, and `SHA256SUMS`, so the server needs nothing but `wget` (or `curl`):
 
 ```sh
 wget -qO- https://github.com/muthanii/otp-lab/releases/latest/download/setup-otp-target.sh \
@@ -99,14 +99,18 @@ An OTP must never open an account that can create admins. The script sets up the
 2. **Name only non-admin accounts in `--users`.** The script refuses admin, system and sudo-capable accounts, creates missing ones and adds them to `otp-users`. PAM refuses OTP logins for root, system accounts (uid below 1000), anyone outside `otp-users`, and anyone in `sudo`, `admin` or `wheel`. Admins keep using keys.
 3. **Read the warnings from step 8.** They cover `otp-users` members added outside the script. PAM can't see personal rules in `/etc/sudoers.d/`, so the script lists `otp-users` members that have one. Remove those rules, or that account can reach root with an OTP.
 
-## How the lab files map to a real server
+## Lab vs real server
 
-| Lab file | On a real server |
-|---|---|
-| [`target/config.hcl`](../target/config.hcl) | Written by the script, with `https://`, `ca_cert` and the role names you pass |
-| [`target/pam-sshd`](../target/pam-sshd) | **Not copied.** The script edits the existing `/etc/pam.d/sshd` and swaps `common-auth` for the same group checks and OTP check, without `-dev` |
-| [`target/otp.conf`](../target/otp.conf) | Written as `00-otp.conf`, so it wins over drop-ins like `50-cloud-init.conf` that turn password login back on. Uses `PermitRootLogin prohibit-password` instead of `no`, so root keeps key login if you rely on it |
-| [`target/Dockerfile`](../target/Dockerfile) | Not used. The script installs sshd and the helper, and creates the `otp-users` group. You create the accounts and add them to it |
+The script does the same things in both places. Only the options differ:
+
+| | Lab target | Real server |
+|---|---|---|
+| `--bao-addr` | `http://172.30.0.2:8200` | `https://…`, your OpenBao |
+| `--insecure-http` | Yes (the lab's OpenBao is plain HTTP) | No |
+| `--ca-cert` | No | Only if OpenBao uses your own CA |
+| `--users` | `user` | The non-admin accounts that should accept OTPs |
+| OpenBao role | One `otp` role for the whole lab network (`172.30.0.0/24`) | The command the script prints: this server's IP as `/32` |
+| sshd | Started by the script (no systemd in containers) | Reloaded through systemd |
 
 ## Before and after running it
 
@@ -119,8 +123,7 @@ An OTP must never open an account that can create admins. The script sets up the
 
 These are fine for the lab but not for a real server:
 
-- OpenBao listens on plain HTTP (`tls_disable = true`), and the helper runs with `-dev` so it accepts that. For anything real, turn on TLS and give the helper a `ca_cert`.
-- `allowed_roles = "*"` lets any OpenBao role issue OTPs for the target.
-- Public-key login is off in [`target/otp.conf`](../target/otp.conf), so OTP is the only way in. That's also why the lab can use `PermitRootLogin no`.
+- OpenBao listens on plain HTTP (`tls_disable = true`), so the lab passes `--insecure-http`, which makes the helper run with `-dev`. For anything real, turn on TLS (and use `--ca-cert` if it's your own CA).
+- One `otp` role covers the whole lab network (`172.30.0.0/24`) instead of one `/32` per server.
 - The OpenBao container has an ssh client so it can act as the client. A real OpenBao server wouldn't run one.
-- `vault-ssh-helper` is built from source in [`target/Dockerfile`](../target/Dockerfile) because HashiCorp's download site is geo-blocked here.
+- `vault-ssh-helper` is built from source by [`scripts/build-release-assets.sh`](../scripts/build-release-assets.sh) and attached to each release, because HashiCorp's download site is geo-blocked here. That applies to real servers too.

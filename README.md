@@ -2,6 +2,8 @@
 
 A small lab where an SSH server accepts **only** one-time passwords issued by OpenBao. No shared passwords, no SSH keys: every login gets a fresh password that works exactly once.
 
+The lab's `target` starts as a fresh Ubuntu server. You set it up with [`setup-otp-target.sh`](scripts/setup-otp-target.sh), the same script you'd run on a real server, so the lab doubles as a rehearsal.
+
 ## What's in the lab
 
 ```mermaid
@@ -14,7 +16,7 @@ flowchart LR
             Bao["OpenBao server :8200<br/>SSH engine, role otp"]
             sshc["ssh client"]
         end
-        subgraph target["🐧 target · 172.30.0.10"]
+        subgraph target["🐧 target · 172.30.0.10 (after setup-otp-target.sh)"]
             sshd["sshd<br/>keyboard-interactive only"]
             pam["PAM<br/>pam_exec"]
             helper["vault-ssh-helper"]
@@ -34,7 +36,7 @@ flowchart LR
 | Service | Inside the lab | From the dev container | Config |
 |---|---|---|---|
 | OpenBao 2.7.1 + ssh client | `172.30.0.2:8200` | `localhost:8210` | [`bao/`](bao/) (`bao.hcl`, `Dockerfile`) |
-| SSH target | `172.30.0.10:22` | `localhost:2230` | [`target/`](target/) |
+| SSH target | `172.30.0.10:22` | `localhost:2230` | Fresh `ubuntu:26.04`, set up with [`setup-otp-target.sh`](scripts/setup-otp-target.sh) |
 
 ## Quick start
 
@@ -44,6 +46,11 @@ export BAO_ADDR=http://127.0.0.1:8210
 bao operator init && bao operator unseal   # unseal 3 times, then: bao login
 bao secrets enable ssh
 bao write ssh/roles/otp key_type=otp default_user=user allowed_users=user cidr_list=172.30.0.0/24
+
+# set up the fresh target with the release script
+docker compose exec target bash -c 'apt-get update -qq && apt-get install -y -qq wget >/dev/null &&
+  wget -qO- https://github.com/muthanii/otp-lab/releases/latest/download/setup-otp-target.sh |
+  bash -s -- --bao-addr http://172.30.0.2:8200 --insecure-http --users user'
 
 bao write -field=key ssh/creds/otp ip=172.30.0.10   # prints an OTP
 ssh -p 2230 user@localhost                          # paste it
@@ -102,7 +109,7 @@ The safety checks, what each step changes and how to undo it are in [Setting up 
 
 | Page | Covers |
 |---|---|
-| [Running the lab](docs/running-the-lab.md) | Setup step by step, limited tokens, logging in from either container, troubleshooting, tear down |
+| [Running the lab](docs/running-the-lab.md) | Setup step by step, setting up the fresh target, extra try servers, limited tokens, logging in from either container, troubleshooting, tear down |
 | [How it works](docs/how-it-works.md) | Login sequence, why OTPs can't be reused, what the target checks, which files get written, OTP vs signed keys |
 | [Setting up a real server](docs/real-server.md) | The [`setup-otp-target.sh`](scripts/setup-otp-target.sh) script, every argument, what changes from the lab, and what to watch out for |
 

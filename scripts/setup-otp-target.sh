@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Turn a Debian/Ubuntu server into an OpenBao SSH OTP target.
-# Does by hand what target/Dockerfile does for the lab. Run as root, and keep
+# The lab's target container is set up with this same script. Run as root, and keep
 # an existing SSH session open until an OTP login works from a second terminal.
 # Run with --help for the options.
 set -euo pipefail

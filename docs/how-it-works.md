@@ -52,12 +52,15 @@ sequenceDiagram
 
 ## What the target checks, in order
 
+Once [`setup-otp-target.sh`](../scripts/setup-otp-target.sh) has set it up, the target checks every SSH login like this:
+
 ```mermaid
 flowchart TD
     A[ssh connection on port 2230] --> R{"Logging in as root?"}
-    R -- "PermitRootLogin no" --> X1[❌ refused]
-    R -- no --> B{"Password or key login?"}
-    B -- "turned off in otp.conf" --> X1
+    R -- "PermitRootLogin prohibit-password,<br/>and root has no SSH key" --> X1[❌ refused]
+    R -- no --> B{"Which login method?"}
+    B -- "password: turned off<br/>in 00-otp.conf" --> X1
+    B -- "SSH key: user has none" --> X1
     B -- "keyboard-interactive" --> G{"PAM: uid ≥ 1000, in otp-users,<br/>not in sudo / admin / wheel?"}
     G -- no --> X2[❌ Permission denied<br/>OTP not used up]
     G -- yes --> C[PAM: pam_exec runs vault-ssh-helper]
@@ -77,8 +80,8 @@ An OTP must never log someone in to an account that can create admins, so the la
 | Layer | Rule | Stops |
 |---|---|---|
 | OpenBao role | `allowed_users=user` | OpenBao won't even issue an OTP for `root` or any other account. Without it, the role issues OTPs for **any** username |
-| sshd ([`otp.conf`](../target/otp.conf)) | `PermitRootLogin no` | Root logins of any kind |
-| PAM ([`pam-sshd`](../target/pam-sshd)) | `uid >= 1000`, `ingroup otp-users`, `notingroup sudo:admin:wheel` | System accounts, accounts not approved for OTP, and anyone in an admin group. These run **before** the OTP check, so a refused login doesn't use up the OTP |
+| sshd (`/etc/ssh/sshd_config.d/00-otp.conf`, written by the script) | `PermitRootLogin prohibit-password`, `PasswordAuthentication no` | Root logging in with a password or OTP. Root could still use an SSH key, but the lab's root has none |
+| PAM (`/etc/pam.d/sshd`, edited by the script) | `uid >= 1000`, `ingroup otp-users`, `notingroup sudo:admin:wheel` | System accounts, accounts not approved for OTP, and anyone in an admin group. These run **before** the OTP check, so a refused login doesn't use up the OTP |
 
 `user` is in `otp-users` and nothing else, has no sudo rights, and has no usable password, so it has no way to become root or add users. A personal rule in `/etc/sudoers.d/` isn't caught by the group check, which is why the [real-server script](real-server.md) warns about OTP accounts that have one.
 
@@ -115,8 +118,8 @@ flowchart LR
 | Machine | You create (setup) | Created by each login |
 |---|---|---|
 | OpenBao | [`bao/bao.hcl`](../bao/bao.hcl), [`bao/Dockerfile`](../bao/Dockerfile). The engine and role live in its storage, not in files | An OTP hash in `raft.db`, deleted again on use. There's no file per OTP |
-| target | [`target/`](../target/): `Dockerfile`, `config.hcl`, `pam-sshd`, `otp.conf` | A block in `/var/log/vault-ssh.log` (the first place to look when a login fails), login records, shell history |
-| Whoever runs `ssh` | Nothing | A `known_hosts` entry the first time. Rebuilding the target gives it new host keys, so expect a "host key changed" warning |
+| target | Nothing by hand: [`setup-otp-target.sh`](../scripts/setup-otp-target.sh) installs `/usr/local/bin/vault-ssh-helper` and writes `/etc/vault-ssh-helper.d/config.hcl`, `/etc/pam.d/sshd` (backup in `sshd.bak-otp`) and `/etc/ssh/sshd_config.d/00-otp.conf` | A block in `/var/log/vault-ssh.log` (the first place to look when a login fails), login records, shell history |
+| Whoever runs `ssh` | Nothing | A `known_hosts` entry the first time. A recreated target (`docker compose down` then `up`) gets new host keys when you set it up again, so expect a "host key changed" warning |
 
 ## OTP vs signed keys
 
