@@ -2,14 +2,14 @@
 
 [← Back to README](../README.md)
 
-On a real Debian or Ubuntu server, [`scripts/setup-otp-target.sh`](../scripts/setup-otp-target.sh) does what [`target/Dockerfile`](../target/Dockerfile) does for the lab. Each [release](https://github.com/muthanii/otp-lab/releases/latest) ships the script, `vault-ssh-helper` for amd64 and arm64, and `SHA256SUMS`, so the server needs nothing but `curl`:
+On a real Debian or Ubuntu server, [`scripts/setup-otp-target.sh`](../scripts/setup-otp-target.sh) does what [`target/Dockerfile`](../target/Dockerfile) does for the lab. Each [release](https://github.com/muthanii/otp-lab/releases/latest) ships the script, `vault-ssh-helper` for amd64 and arm64, and `SHA256SUMS`, so the server needs nothing but `wget` (or `curl`):
 
 ```sh
-curl -fsSL https://github.com/muthanii/otp-lab/releases/latest/download/setup-otp-target.sh \
+wget -qO- https://github.com/muthanii/otp-lab/releases/latest/download/setup-otp-target.sh \
   | sudo bash -s -- --bao-addr https://bao.example.com:8200 --users user
 ```
 
-The [README](../README.md#use-it-on-a-real-server) shows how to download and check the script first, or pin a version.
+The [README](../README.md#use-it-on-a-real-server) shows how to download and check the script first, read `--help`, every argument in detail, and how to pin a version.
 
 ## What the script does
 
