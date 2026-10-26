@@ -229,7 +229,13 @@ install -d -m 0755 "$CONF_DIR"
 step "4/8 Checking the config and the connection to OpenBao"
 if verify_out=$("$BIN" -verify-only $dev_flag -config="$CONF_DIR/config.hcl" 2>&1); then verify_rc=0; else verify_rc=$?; fi
 helper_log "$verify_out"
-(( verify_rc == 0 )) || die "vault-ssh-helper could not reach OpenBao at $bao_addr (check the address and port; OpenBao listens on 8200 by default); nothing in PAM or sshd was changed"
+if (( verify_rc != 0 )); then
+  case $verify_out in
+    *"is sealed"*)    die "OpenBao at $bao_addr is sealed; unseal it, then rerun. Nothing in PAM or sshd was changed" ;;
+    *"not initialized"*) die "OpenBao at $bao_addr is not initialised; run bao operator init and unseal it, then rerun. Nothing in PAM or sshd was changed" ;;
+    *)                die "vault-ssh-helper could not reach OpenBao at $bao_addr (check the address and port; OpenBao listens on 8200 by default); nothing in PAM or sshd was changed" ;;
+  esac
+fi
 ok "OpenBao answered"
 
 step "5/8 Setting up OTP accounts (group: $otp_group)"
