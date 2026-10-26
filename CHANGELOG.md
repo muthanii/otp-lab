@@ -1,0 +1,19 @@
+# Changelog
+
+All notable changes to this project are documented here.
+The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [Unreleased]
+
+## [0.1.0] - 2026-10-26
+
+### Added
+
+- Docker Compose lab with OpenBao 2.7.1 (Raft storage) and an Ubuntu SSH target on a fixed `172.30.0.0/24` network.
+- Target that accepts only OpenBao OTP logins through `vault-ssh-helper` v0.2.4 and PAM, for the `user` account.
+- ssh client in the OpenBao image, so OTP logins can be tested from either container.
+- `scripts/setup-otp-target.sh` to set up a real Debian or Ubuntu server as an OTP target, with a connection check before changing PAM or sshd and a rollback if `sshd -t` fails.
+- README and docs with Mermaid diagrams: running the lab, how OTP logins work, and setting up a real server.
+
+[Unreleased]: ../../compare/v0.1.0...HEAD
+[0.1.0]: ../../releases/tag/v0.1.0

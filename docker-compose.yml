@@ -1,0 +1,33 @@
+services:
+  openbao:
+    build: ./bao
+    command: server
+    cap_add: [IPC_LOCK]
+    environment:
+      BAO_ADDR: http://127.0.0.1:8200
+    ports:
+      - "8210:8200"
+    volumes:
+      - ./bao/bao.hcl:/openbao/config/bao.hcl:ro
+      - bao-data:/openbao/file
+    networks:
+      lab:
+        ipv4_address: 172.30.0.2
+
+  target:
+    build: ./target
+    ports:
+      - "2230:22"
+    depends_on: [openbao]
+    networks:
+      lab:
+        ipv4_address: 172.30.0.10
+
+networks:
+  lab:
+    ipam:
+      config:
+        - subnet: 172.30.0.0/24
+
+volumes:
+  bao-data:

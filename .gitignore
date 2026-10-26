@@ -1,0 +1,6 @@
+# bao operator init output, tokens and keys: never commit these.
+*init*.json
+.vault-token
+*.pem
+*.key
+.env
