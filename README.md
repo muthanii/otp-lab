@@ -49,6 +49,51 @@ bao write -field=key ssh/creds/otp ip=172.30.0.10   # prints an OTP
 ssh -p 2230 user@localhost                          # paste it
 ```
 
+## Use it on a real server
+
+You need a Debian or Ubuntu server with `openssh-server`, an OpenBao reachable from it over HTTPS, and the CA certificate that signed OpenBao's TLS certificate. Run these **on the server**, and keep your current SSH session open until step 5 works:
+
+**1. Get the script.**
+
+```sh
+git clone https://github.com/muthanii/otp-lab.git
+cd otp-lab/scripts
+```
+
+**2. Get `vault-ssh-helper`.** The script builds it if Go is installed on the server. Otherwise, copy over the one from the lab (the server must have the same CPU architecture, usually `amd64`):
+
+```sh
+# in the dev container, from the otp-lab folder:
+docker compose cp target:/usr/local/bin/vault-ssh-helper .
+scp vault-ssh-helper ca.pem <you>@<server>:otp-lab/scripts/
+```
+
+**3. Create the OTP accounts** (non-admins only) and run the script:
+
+```sh
+sudo useradd -m -s /bin/bash alice && sudo usermod -p '*' alice   # no usable password, like the lab
+sudo groupadd -f otp-users && sudo usermod -aG otp-users alice
+sudo ./setup-otp-target.sh --bao-addr https://bao.example.com:8200 \
+     --ca-cert ca.pem --roles otp --helper ./vault-ssh-helper
+```
+
+The script prints the server's IP at the end, and warns about any `otp-users` member that has admin or sudo rights.
+
+**4. In OpenBao**, allow only those accounts and only this server's IP:
+
+```sh
+bao write ssh/roles/otp key_type=otp default_user=alice allowed_users=alice cidr_list=<server IP>/32
+```
+
+**5. Test from a second terminal:**
+
+```sh
+bao write -field=key ssh/creds/otp ip=<server IP>   # prints an OTP
+ssh alice@<server>                                  # paste it
+```
+
+Use the IP the script printed, even if you connect to the server by a different public address. All options, the safety checks and how to undo the changes are in [Setting up a real server](docs/real-server.md).
+
 ## Docs
 
 | Page | Covers |
